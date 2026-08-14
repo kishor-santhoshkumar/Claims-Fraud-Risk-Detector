@@ -1,0 +1,286 @@
+{
+  "clear_fraud": {
+    "provider_id": "PRV52985",
+    "score": 0.9999127388000488,
+    "risk_tier": "high",
+    "total_reimbursed": 1720120.0,
+    "expected_loss": 1719969.90026474,
+    "n_claims": 1403,
+    "evidence": [
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total reimbursement of $1,720,120 \u2014 99th percentile, far above the median provider of $19,805. Increases risk.",
+        "type": "shap",
+        "feature": "total_reimbursed",
+        "value": 1720120.0,
+        "impact": 2.9493637084960938,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total deductible collected of $128,764 \u2014 99th percentile, far above the median provider of $310. Increases risk.",
+        "type": "shap",
+        "feature": "total_deductible",
+        "value": 128764.0,
+        "impact": 1.5043530464172363,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg claims per beneficiary of 2.8 \u2014 98th percentile, far above the median provider of 1.1. Increases risk.",
+        "type": "shap",
+        "feature": "claims_per_bene",
+        "value": 2.8003992015968064,
+        "impact": 0.8473060727119446,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Longest inpatient stay of 35 days \u2014 100th percentile, far above the median provider of 0 days. Increases risk.",
+        "type": "shap",
+        "feature": "max_admission_length",
+        "value": 35.0,
+        "impact": 0.6883938312530518,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Longest claim duration of 35 days \u2014 100th percentile, far above the median provider of 20 days. Increases risk.",
+        "type": "shap",
+        "feature": "max_claim_duration",
+        "value": 35.0,
+        "impact": 0.6324844360351562,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Highest single-claim reimbursement of $71,000 \u2014 99th percentile, far above the median provider of $3,300. Increases risk.",
+        "type": "shap",
+        "feature": "max_reimbursed",
+        "value": 71000.0,
+        "impact": 0.6033311486244202,
+        "direction": "increases_risk"
+      }
+    ],
+    "clearance_summary": null
+  },
+  "leie_placeholder": {
+    "provider_id": "PRV56560",
+    "score": 0.9998877048492432,
+    "risk_tier": "high",
+    "total_reimbursed": 3212000.0,
+    "expected_loss": 3211639.307975769,
+    "n_claims": 2313,
+    "evidence": [
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total reimbursement of $3,212,000 \u2014 100th percentile, far above the median provider of $19,805. Increases risk.",
+        "type": "shap",
+        "feature": "total_reimbursed",
+        "value": 3212000.0,
+        "impact": 3.183696746826172,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total deductible collected of $266,680 \u2014 100th percentile, far above the median provider of $310. Increases risk.",
+        "type": "shap",
+        "feature": "total_deductible",
+        "value": 266680.0,
+        "impact": 1.3840545415878296,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Longest inpatient stay of 35 days \u2014 100th percentile, far above the median provider of 0 days. Increases risk.",
+        "type": "shap",
+        "feature": "max_admission_length",
+        "value": 35.0,
+        "impact": 0.7307334542274475,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg claims per beneficiary of 2.5 \u2014 96th percentile, far above the median provider of 1.1. Increases risk.",
+        "type": "shap",
+        "feature": "claims_per_bene",
+        "value": 2.514130434782609,
+        "impact": 0.7271240949630737,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Longest claim duration of 35 days \u2014 100th percentile, far above the median provider of 20 days. Increases risk.",
+        "type": "shap",
+        "feature": "max_claim_duration",
+        "value": 35.0,
+        "impact": 0.6993617415428162,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Distinct primary diagnosis codes of 1334 \u2014 100th percentile, far above the median provider of 29. Increases risk.",
+        "type": "shap",
+        "feature": "n_unique_primary_diag",
+        "value": 1334.0,
+        "impact": 0.6862794160842896,
+        "direction": "increases_risk"
+      }
+    ],
+    "clearance_summary": null
+  },
+  "borderline": {
+    "provider_id": "PRV51431",
+    "score": 0.3250690698623657,
+    "risk_tier": "medium",
+    "total_reimbursed": 236720.0,
+    "expected_loss": 76950.35021781921,
+    "n_claims": 49,
+    "evidence": [
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total reimbursement of $236,720 \u2014 90th percentile, far above the median provider of $19,805. Increases risk.",
+        "type": "shap",
+        "feature": "total_reimbursed",
+        "value": 236720.0,
+        "impact": 0.9909988045692444,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg beneficiary age at claim of 76 years \u2014 82nd percentile, far above the median provider of 73 years. Reduces risk.",
+        "type": "shap",
+        "feature": "mean_age_at_claim",
+        "value": 76.12649988126667,
+        "impact": -0.8829634189605713,
+        "direction": "decreases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Longest inpatient stay of 23 days \u2014 90th percentile, far above the median provider of 0 days. Increases risk.",
+        "type": "shap",
+        "feature": "max_admission_length",
+        "value": 23.0,
+        "impact": 0.661500871181488,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "States spanning claims of 1 \u2014 53rd percentile, near the median provider of 1. Reduces risk.",
+        "type": "shap",
+        "feature": "n_distinct_states",
+        "value": 1.0,
+        "impact": -0.39332839846611023,
+        "direction": "decreases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg diagnosis codes per claim of 5.5 \u2014 89th percentile, far above the median provider of 2.8. Reduces risk.",
+        "type": "shap",
+        "feature": "mean_n_diag",
+        "value": 5.510204081632653,
+        "impact": -0.3171634376049042,
+        "direction": "decreases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg admission length of 6.2 days \u2014 89th percentile, far above the median provider of 0.0 days. Reduces risk.",
+        "type": "shap",
+        "feature": "mean_admission_length",
+        "value": 6.2,
+        "impact": -0.28720590472221375,
+        "direction": "decreases_risk"
+      }
+    ],
+    "clearance_summary": "Not flagged. Avg beneficiary age at claim of 76 years \u2014 82nd percentile, far above the median provider of 73 years. Reduces risk. States spanning claims of 1 \u2014 53rd percentile, near the median provider of 1. Reduces risk. Avg diagnosis codes per claim of 5.5 \u2014 89th percentile, far above the median provider of 2.8. Reduces risk. Avg admission length of 6.2 days \u2014 89th percentile, far above the median provider of 0.0 days. Reduces risk. Inpatient claims submitted of 25 \u2014 93rd percentile, far above the median provider of 0. Reduces risk. Score 0.33, below the review threshold of 0.50. 0 of 0 rules checked, none fired."
+  },
+  "false_positive": {
+    "provider_id": "PRV51456",
+    "score": 0.9955784678459167,
+    "risk_tier": "high",
+    "total_reimbursed": 1038990.0,
+    "expected_loss": 1034396.072307229,
+    "n_claims": 135,
+    "evidence": [
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total reimbursement of $1,038,990 \u2014 98th percentile, far above the median provider of $19,805. Increases risk.",
+        "type": "shap",
+        "feature": "total_reimbursed",
+        "value": 1038990.0,
+        "impact": 2.370209217071533,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Total deductible collected of $117,480 \u2014 99th percentile, far above the median provider of $310. Increases risk.",
+        "type": "shap",
+        "feature": "total_deductible",
+        "value": 117480.0,
+        "impact": 1.2720750570297241,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Longest inpatient stay of 35 days \u2014 100th percentile, far above the median provider of 0 days. Increases risk.",
+        "type": "shap",
+        "feature": "max_admission_length",
+        "value": 35.0,
+        "impact": 0.9438003897666931,
+        "direction": "increases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg claims per beneficiary of 1.1 \u2014 54th percentile, near the median provider of 1.1. Reduces risk.",
+        "type": "shap",
+        "feature": "claims_per_bene",
+        "value": 1.08,
+        "impact": -0.87227863073349,
+        "direction": "decreases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Inpatient claims submitted of 112 \u2014 99th percentile, far above the median provider of 0. Reduces risk.",
+        "type": "shap",
+        "feature": "n_inpatient_claims",
+        "value": 112.0,
+        "impact": -0.5909113883972168,
+        "direction": "decreases_risk"
+      },
+      {
+        "category": "statistical",
+        "severity": null,
+        "summary": "Avg providers per attending physician of 2.0 \u2014 88th percentile, far above the median provider of 1.1. Reduces risk.",
+        "type": "shap",
+        "feature": "mean_phy_n_providers",
+        "value": 1.962962962962963,
+        "impact": -0.5404398441314697,
+        "direction": "decreases_risk"
+      }
+    ],
+    "clearance_summary": null
+  }
+}

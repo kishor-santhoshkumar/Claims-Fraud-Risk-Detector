@@ -1,0 +1,371 @@
+"""Temporary FastAPI server for manual end-to-end testing.
+
+Run:
+    uvicorn api_temp:app --reload
+
+Docs UI:
+    http://127.0.0.1:8000/docs      ← Swagger (interactive)
+    http://127.0.0.1:8000/redoc     ← ReDoc (readable)
+
+Endpoints
+─────────
+GET  /                                  health + tier summary
+GET  /providers/                        paginated list; filter by risk_tier
+GET  /providers/{provider_id}           single provider record
+GET  /provider/{provider_id}/why-not    clearance narrative for non-flagged providers
+POST /score                             score a new provider from raw features
+                                        (model is trained once, cached to disk)
+
+Notes
+─────
+• `scored_providers.json` must exist (run Section 12 of the notebook first).
+• First POST /score call trains the full XGBoost model (~30 s) and saves it to
+  outputs/model_cache.ubj.  Subsequent calls load from disk and respond in <1 s.
+• All feature fields are optional; missing ones default to 0.0.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Literal, Optional
+
+import numpy as np
+import pandas as pd
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
+
+# ── Project path setup ────────────────────────────────────────────────────────
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.schema import ScoredProvider  # noqa: E402
+from src.export import (  # noqa: E402
+    OUTPUTS,
+    HIGH_THRESHOLD,
+    MEDIUM_THRESHOLD,
+    _risk_tier,
+    _build_shap_evidence,
+)
+
+# ── App ───────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="Claims Fraud Risk Detector",
+    description=(
+        "Temporary API for manual testing of the two-stage fraud-detection pipeline "
+        "(RandomForest gate → XGBoost scorer).  "
+        "All 5 410 pre-scored providers are available via GET.  "
+        "POST /score runs live inference on arbitrary feature vectors."
+    ),
+    version="0.1.0-temp",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# ── In-memory store loaded at startup ─────────────────────────────────────────
+_PROVIDERS: dict[str, ScoredProvider] = {}
+_TIER_COUNTS: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
+
+
+@app.on_event("startup")
+def _load_providers() -> None:
+    path = OUTPUTS / "scored_providers.json"
+    if not path.exists():
+        print(
+            f"[api_temp] WARNING: {path} not found. "
+            "Run Section 12 of the notebook to generate it."
+        )
+        return
+    with open(path) as fh:
+        records = json.load(fh)
+    for rec in records:
+        p = ScoredProvider.model_validate(rec)
+        _PROVIDERS[p.provider_id] = p
+        _TIER_COUNTS[p.risk_tier] += 1
+    print(
+        f"[api_temp] Loaded {len(_PROVIDERS):,} providers. "
+        f"high={_TIER_COUNTS['high']}  medium={_TIER_COUNTS['medium']}  "
+        f"low={_TIER_COUNTS['low']}"
+    )
+
+
+# ── Lazy model cache for POST /score ─────────────────────────────────────────
+_MODEL_STATE: dict = {}  # keys: xgb, rf_gate, feature_names, explainer
+
+
+def _get_model() -> dict:
+    """Return the model state dict, training it on first call."""
+    if _MODEL_STATE:
+        return _MODEL_STATE
+
+    import warnings
+    warnings.filterwarnings("ignore")
+    import shap
+    from sklearn.ensemble import RandomForestClassifier
+    from xgboost import XGBClassifier
+
+    cache_path = OUTPUTS / "model_cache.ubj"
+    feat_path = OUTPUTS / "feature_cols.json"
+
+    features = pd.read_parquet(OUTPUTS / "features_train.parquet")
+    with open(feat_path) as fh:
+        feat_names: list[str] = json.load(fh)
+    X = features[feat_names].fillna(0).values
+    y = features["fraud_label"].values
+    ntr = float((1 - y.mean()) / y.mean())
+
+    # ── XGBoost (load from cache or train) ────────────────────────────────
+    xgb = XGBClassifier(
+        n_estimators=400, max_depth=5, learning_rate=0.05,
+        scale_pos_weight=ntr, eval_metric="aucpr", random_state=42,
+        subsample=0.8, colsample_bytree=0.8, tree_method="hist", verbosity=0,
+    )
+    if cache_path.exists():
+        print("[api_temp] Loading XGBoost from cache ...")
+        xgb.load_model(str(cache_path))
+    else:
+        print("[api_temp] Training XGBoost (first call — ~30 s) ...")
+        xgb.fit(pd.DataFrame(X, columns=feat_names), y)
+        xgb.save_model(str(cache_path))
+        print(f"[api_temp] Model saved → {cache_path}")
+
+    # ── RF gate threshold ─────────────────────────────────────────────────
+    gate_path = OUTPUTS / "rf_gate_threshold.json"
+    if gate_path.exists():
+        with open(gate_path) as fh:
+            gate = float(json.load(fh)["gate"])
+    else:
+        print("[api_temp] Computing RF gate threshold ...")
+        rf = RandomForestClassifier(
+            n_estimators=300, class_weight="balanced",
+            oob_score=True, n_jobs=-1, random_state=42,
+        )
+        rf.fit(X, y)
+        gate = float(np.percentile(rf.oob_decision_function_[:, 1][y == 1], 5))
+        with open(gate_path, "w") as fh:
+            json.dump({"gate": gate}, fh)
+        print(f"[api_temp] RF gate = {gate:.4f}")
+
+    explainer = shap.TreeExplainer(xgb)
+
+    # Pre-compute training population stats so POST /score can report percentiles
+    # for any submitted feature vector relative to the 5,410-provider population.
+    _features_df = pd.read_parquet(OUTPUTS / "features_train.parquet")
+    _X_stats = _features_df[feat_names].fillna(0).values
+    feature_stats: dict[str, dict] = {
+        feat: {
+            "median": float(np.median(_X_stats[:, j])),
+            "sorted_col": np.sort(_X_stats[:, j]),
+            "n": len(_X_stats),
+        }
+        for j, feat in enumerate(feat_names)
+    }
+
+    _MODEL_STATE.update(
+        xgb=xgb,
+        rf_gate=gate,
+        feature_names=feat_names,
+        explainer=explainer,
+        feature_stats=feature_stats,
+    )
+    return _MODEL_STATE
+
+
+# ── Request / response models ─────────────────────────────────────────────────
+
+class ProviderFeatures(BaseModel):
+    """Raw provider-level features for live scoring.
+
+    All fields are optional — missing values are filled with **0.0**.
+    Copy-paste a known provider's features from GET /providers/{id} to explore
+    what happens when you change individual values.
+    """
+
+    total_reimbursed: Optional[float] = Field(None, description="Total Medicare reimbursement ($)")
+    max_admission_length: Optional[float] = Field(None, description="Longest inpatient stay (days)")
+    claims_per_bene: Optional[float] = Field(None, description="Average claims per beneficiary")
+    total_deductible: Optional[float] = Field(None, description="Total deductible collected ($)")
+    max_claim_duration: Optional[float] = Field(None, description="Longest claim duration (days)")
+    mean_chronic_count: Optional[float] = Field(None, description="Average chronic conditions per beneficiary")
+    mean_bene_n_providers: Optional[float] = Field(None, description="Average providers per beneficiary")
+    deceased_rate: Optional[float] = Field(None, description="Fraction of claims with deceased beneficiary")
+    mean_age_at_claim: Optional[float] = Field(None, description="Average beneficiary age at claim")
+    n_distinct_states: Optional[float] = Field(None, description="Number of states spanning claims")
+    n_claims: Optional[float] = Field(None, description="Total claims submitted")
+    n_unique_bene: Optional[float] = Field(None, description="Unique beneficiaries billed")
+    ip_op_ratio: Optional[float] = Field(None, description="Inpatient-to-outpatient claim ratio")
+    claims_per_physician: Optional[float] = Field(None, description="Average claims per attending physician")
+    mean_phy_n_providers: Optional[float] = Field(None, description="Average providers per attending physician")
+    n_unique_attending: Optional[float] = Field(None, description="Distinct attending physicians used")
+    mean_reimbursed: Optional[float] = Field(None, description="Mean reimbursement per claim ($)")
+    max_reimbursed: Optional[float] = Field(None, description="Highest single-claim reimbursement ($)")
+    std_reimbursed: Optional[float] = Field(None, description="Standard deviation of claim amounts ($)")
+    mean_deductible: Optional[float] = Field(None, description="Average deductible per claim ($)")
+    mean_claim_duration: Optional[float] = Field(None, description="Average claim duration (days)")
+    mean_admission_length: Optional[float] = Field(None, description="Average inpatient admission length (days)")
+    mean_n_diag: Optional[float] = Field(None, description="Average diagnosis codes per claim")
+    mean_n_proc: Optional[float] = Field(None, description="Average procedure codes per claim")
+    n_unique_primary_diag: Optional[float] = Field(None, description="Distinct primary diagnosis codes")
+    primary_diag_entropy: Optional[float] = Field(None, description="Diagnosis-code entropy (bits)")
+    n_distinct_counties: Optional[float] = Field(None, description="Counties spanning claims")
+    n_inpatient_claims: Optional[float] = Field(None, description="Number of inpatient claims")
+    n_outpatient_claims: Optional[float] = Field(None, description="Number of outpatient claims")
+    n_unique_operating: Optional[float] = Field(None, description="Distinct operating physicians")
+    n_unique_other: Optional[float] = Field(None, description="Distinct other physicians")
+
+
+class ClearanceResponse(BaseModel):
+    """Why-not-flagged response for a low or medium tier provider."""
+
+    provider_id: str
+    risk_tier: str = Field(description="'low' or 'medium' — never 'high' (flagged providers are rejected)")
+    score: float = Field(description="Fraud probability from the model (0–1)")
+    clearance_summary: str = Field(description="Plain-English explanation of why the provider was not flagged")
+
+
+class ScoreResponse(BaseModel):
+    """Live inference result for a submitted feature vector."""
+
+    provider_id: str = Field(description="Placeholder ID assigned to this submission")
+    score: float = Field(description="Fraud probability from XGBoost (0–1)")
+    risk_tier: Literal["low", "medium", "high"]
+    passed_rf_gate: bool = Field(description="Whether the RF gate passed this provider to XGBoost")
+    total_reimbursed: float
+    expected_loss: float = Field(description="score × total_reimbursed")
+    n_claims: int
+    evidence: list = Field(description="Top-6 SHAP evidence items")
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.get("/", summary="Health check & tier summary")
+def root():
+    return {
+        "status": "ok",
+        "providers_loaded": len(_PROVIDERS),
+        "tier_counts": _TIER_COUNTS,
+        "thresholds": {"high": HIGH_THRESHOLD, "medium": MEDIUM_THRESHOLD},
+    }
+
+
+@app.get(
+    "/providers/",
+    response_model=list[ScoredProvider],
+    summary="List providers (paginated, filterable by tier)",
+)
+def list_providers(
+    risk_tier: Optional[Literal["low", "medium", "high"]] = Query(
+        None, description="Filter to a specific risk tier"
+    ),
+    min_score: float = Query(0.0, ge=0.0, le=1.0, description="Minimum fraud score"),
+    limit: int = Query(50, ge=1, le=500, description="Results per page"),
+    skip: int = Query(0, ge=0, description="Records to skip (for pagination)"),
+    sort_by_score: bool = Query(True, description="Sort descending by fraud score"),
+):
+    results = list(_PROVIDERS.values())
+    if risk_tier:
+        results = [p for p in results if p.risk_tier == risk_tier]
+    if min_score > 0:
+        results = [p for p in results if p.score >= min_score]
+    if sort_by_score:
+        results.sort(key=lambda p: p.score, reverse=True)
+    return results[skip : skip + limit]
+
+
+@app.get(
+    "/providers/{provider_id}",
+    response_model=ScoredProvider,
+    summary="Fetch a single provider by ID",
+)
+def get_provider(provider_id: str):
+    p = _PROVIDERS.get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    return p
+
+
+@app.get(
+    "/provider/{provider_id}/why-not",
+    response_model=ClearanceResponse,
+    summary="Why this provider was not flagged",
+)
+def why_not_flagged(provider_id: str):
+    """Plain-English clearance narrative for a non-flagged (low or medium tier) provider.
+
+    Returns HTTP 400 if the provider is flagged (risk_tier=high) — flagged providers
+    have a case file, not a clearance summary; use GET /providers/{provider_id} instead.
+    Returns HTTP 404 if the provider ID is not found.
+    """
+    p = _PROVIDERS.get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    if p.risk_tier == "high":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Provider '{provider_id}' is flagged (tier=high, score={p.score:.4f}). "
+                "Flagged providers have a case file, not a clearance summary. "
+                "Use GET /providers/{provider_id} for the full evidence record."
+            ),
+        )
+    return ClearanceResponse(
+        provider_id=p.provider_id,
+        risk_tier=p.risk_tier,
+        score=p.score,
+        clearance_summary=p.clearance_summary or "",
+    )
+
+
+@app.post(
+    "/score",
+    response_model=ScoreResponse,
+    summary="Score a provider from raw features (live inference)",
+)
+def score_provider(features: ProviderFeatures):
+    """Submit a provider feature vector and receive a live fraud risk score.
+
+    **First call** trains and caches the XGBoost model (~30 s).
+    Subsequent calls respond in under 1 second.
+
+    Tips for manual testing via /docs:
+    - Paste a known provider's feature values from GET /providers/{id}.
+    - Flip `deceased_rate` to 1.0 and `mean_bene_n_providers` to a high value
+      to see how the score changes.
+    - All fields default to 0.0 — submitting `{}` scores the all-zero vector.
+    """
+    state = _get_model()
+    feat_names: list[str] = state["feature_names"]
+    xgb = state["xgb"]
+    gate: float = state["rf_gate"]
+    explainer = state["explainer"]
+    feature_stats: dict = state["feature_stats"]
+
+    # Build feature row — fill missing with 0
+    row_dict = {k: (v if v is not None else 0.0) for k, v in features.model_dump().items()}
+    row = np.array([row_dict.get(f, 0.0) for f in feat_names], dtype=float).reshape(1, -1)
+    row_df = pd.DataFrame(row, columns=feat_names)
+
+    # RF gate: we don't have OOF for a new point, so we use raw XGBoost probability
+    # to decide whether the provider passes the gate (consistent with notebook logic).
+    xgb_proba = float(xgb.predict_proba(row_df)[0, 1])
+    passed_gate = xgb_proba >= gate
+
+    score = xgb_proba if passed_gate else 0.0
+
+    shap_row = explainer.shap_values(row_df)[0]
+    evidence = _build_shap_evidence(feat_names, row[0], shap_row, feature_stats)
+
+    total_reimb = row_dict.get("total_reimbursed", 0.0)
+    n_claims_val = int(row_dict.get("n_claims", 0))
+
+    return ScoreResponse(
+        provider_id="LIVE_SUBMISSION",
+        score=score,
+        risk_tier=_risk_tier(score),
+        passed_rf_gate=passed_gate,
+        total_reimbursed=total_reimb,
+        expected_loss=score * total_reimb,
+        n_claims=n_claims_val,
+        evidence=[e.model_dump() for e in evidence],
+    )
