@@ -25,7 +25,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.schema import Evidence, ShapEvidence, ScoredProvider  # noqa: E402
+from src.schema import Evidence, RuleEvidence, ShapEvidence, ScoredProvider  # noqa: E402
 
 OUTPUTS = _PROJECT_ROOT / "outputs"
 
@@ -200,6 +200,8 @@ def _build_clearance_summary(
     shap_row: np.ndarray,
     feature_stats: dict[str, dict],
     score: float,
+    n_rules_checked: int = 0,
+    n_rules_fired: int = 0,
 ) -> str:
     """Plain-English explanation of why a low/medium-tier provider was not flagged.
 
@@ -230,9 +232,10 @@ def _build_clearance_summary(
     else:
         proximity = "just below"
 
+    fired_str = f"{n_rules_fired} fired" if n_rules_fired else "none fired"
     sentences.append(
         f"Score {score:.2f}, {proximity} the review threshold of {HIGH_THRESHOLD:.2f}. "
-        "0 of 0 rules checked, none fired."
+        f"{n_rules_checked} rules checked, {fired_str}."
     )
     return " ".join(sentences)
 
@@ -244,12 +247,17 @@ def build_scored_providers(
     oof: np.ndarray,
     shap_vals: np.ndarray,
     feature_names: list[str],
+    engine=None,               # RulesEngine | None
+    claims_df: pd.DataFrame | None = None,
 ) -> list[ScoredProvider]:
     """Build one ScoredProvider per row in *features*.
 
     Row order must be identical across *features*, *oof*, and *shap_vals*;
     this is guaranteed because all three are produced in the same notebook session
     from the same provider_df without shuffling.
+
+    If `engine` and `claims_df` are supplied, rule findings are computed for
+    every provider and appended to the evidence list alongside SHAP items.
     """
     X = features[feature_names].fillna(0).values  # (N, F) — matches SHAP ordering
 
@@ -268,25 +276,45 @@ def build_scored_providers(
     total_reimbs = features["total_reimbursed"].to_numpy(dtype=float)
     n_claims_arr = features["n_claims"].to_numpy(dtype=int)
 
+    # Build per-provider claims lookup once — O(N) instead of O(N*M)
+    provider_claims_map: dict[str, pd.DataFrame] = {}
+    if engine is not None and claims_df is not None:
+        provider_claims_map = {
+            str(pid): grp for pid, grp in claims_df.groupby("Provider")
+        }
+    n_rules_total = len(engine.rules) if engine is not None else 0
+
     providers: list[ScoredProvider] = []
     for i in range(len(features)):
         score = float(oof[i])
+        pid = str(provider_ids[i])
         total_reimb = float(total_reimbs[i])
         tier = _risk_tier(score)
-        evidence: list[Evidence] = _build_shap_evidence(
-            feature_names,
-            X[i],
-            shap_vals[i],
-            feature_stats,
+
+        shap_evidence: list[Evidence] = _build_shap_evidence(
+            feature_names, X[i], shap_vals[i], feature_stats,
         )
+
+        rule_findings: list[RuleEvidence] = []
+        if engine is not None and claims_df is not None:
+            provider_claims = provider_claims_map.get(pid)
+            if provider_claims is not None:
+                rule_findings = engine.evaluate(pid, provider_claims, all_claims=claims_df)
+
+        evidence: list[Evidence] = shap_evidence + rule_findings
+
         clearance = (
-            _build_clearance_summary(feature_names, X[i], shap_vals[i], feature_stats, score)
+            _build_clearance_summary(
+                feature_names, X[i], shap_vals[i], feature_stats, score,
+                n_rules_checked=n_rules_total,
+                n_rules_fired=len(rule_findings),
+            )
             if tier != "high"
             else None
         )
         providers.append(
             ScoredProvider(
-                provider_id=str(provider_ids[i]),
+                provider_id=pid,
                 score=score,
                 risk_tier=tier,
                 total_reimbursed=total_reimb,
@@ -449,8 +477,21 @@ def main() -> None:
     assert 0.720 <= pr_auc <= 0.740, f"PR-AUC {pr_auc:.4f} outside expected [0.720, 0.740]"
     assert 0.935 <= roc_auc <= 0.950, f"ROC-AUC {roc_auc:.4f} outside expected [0.935, 0.950]"
 
-    # Build all scored providers
-    providers = build_scored_providers(features, oof, shap_vals, feature_names)
+    # Load claims data and initialise the rules engine
+    from src.loaders import load_all
+    from src.rules import RulesEngine, build_claims_for_rules
+
+    print("\nLoading raw claims for rules engine ...")
+    raw = load_all()
+    claims_df = build_claims_for_rules(raw["bene"], raw["ip"], raw["op"])
+    engine = RulesEngine(_PROJECT_ROOT / "rules.yaml")
+    print(f"  {len(claims_df):,} claims ready  |  {len(engine.rules)} rules loaded")
+
+    # Build all scored providers (SHAP evidence + rule findings)
+    providers = build_scored_providers(
+        features, oof, shap_vals, feature_names,
+        engine=engine, claims_df=claims_df,
+    )
 
     # Evidence semantics validation
     _validate_shap_evidence(providers)
@@ -470,6 +511,13 @@ def main() -> None:
     with open(scored_path, "w") as fh:
         json.dump([p.model_dump() for p in providers], fh)
     print(f"\nWrote {len(providers):,} providers -> {scored_path}")
+
+    # Round-trip validation: reload from disk and validate every record
+    with open(scored_path) as fh:
+        reloaded = json.load(fh)
+    for rec in reloaded:
+        ScoredProvider.model_validate(rec)
+    print(f"Round-trip validation passed: {len(reloaded):,} ScoredProvider records.")
 
     # Pick and write sample providers
     samples = _pick_samples(providers, labels)

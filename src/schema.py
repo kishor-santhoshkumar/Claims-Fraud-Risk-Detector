@@ -47,12 +47,13 @@ class ShapEvidence(_BaseEvidence):
 class RuleEvidence(_BaseEvidence):
     """Rule-engine finding.
 
-    Slot reserved for the rules-engine integration that plugs in later.
     Examples: post-death claim detected, duplicate claim pair found.
+    `citation` is the policy corpus citation string (e.g. "Medicare PIM Ch.4 §4.3.1").
     """
 
     type: Literal["rule"] = "rule"
     rule_id: str
+    citation: str
     claims_affected: int
     relates_to: Optional[str] = None  # linked claim-ID or rule chain
 

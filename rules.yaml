@@ -1,0 +1,209 @@
+# Rules engine — check definitions
+#
+# Claims Fraud Risk Detector (Cognizant NPN AIA, UC01)
+#
+# Each entry is one check. This file is written by hand and never changes
+# per provider. The engine reads it, runs every check against a provider's
+# claims, and emits one RuleEvidence object per rule that fires.
+#
+# THE TEST every rule here passes:
+#   "If I ran this on perfectly honest data, would it fire?"
+#   If yes, it is a statistic and belongs in SHAP or PeerEvidence, not here.
+#
+# CITATIONS: fields marked TODO must be filled from policy_chunks.jsonl
+# using the `citation_string` field. Do not ship a rule without one.
+#
+# WARNING: do not cite NCCI on any rule that fires on inpatient claims.
+# NCCI PTP edits do not apply to inpatient facility claims.
+
+rules:
+
+  # ---------------------------------------------------------------------
+  # TIER 1 — logical impossibilities
+  # These cannot occur in honest data. No thresholds. Strongest evidence.
+  # ---------------------------------------------------------------------
+
+  - rule_id: POST_DEATH_SERVICE
+    category: fraud
+    severity: high
+    citation: "TODO — PIM Chapter 4, program integrity section"
+    description: >
+      Claim service start date falls after the beneficiary's recorded
+      date of death.
+    scope: claim
+    logic:
+      type: date_compare
+      left: ClaimStartDt
+      operator: after
+      right: DOD
+      requires: [DOD]
+    summary_template: >
+      Billed {n} service(s) with a start date after the beneficiary's
+      recorded date of death.
+    notes: >
+      Highest-value rule in the file. Impossible in clean data, needs no
+      threshold, and is immediately understandable to a non-technical
+      reviewer. Build this first.
+
+  - rule_id: DISCHARGE_BEFORE_ADMIT
+    category: waste
+    severity: medium
+    citation: "TODO — PIM Chapter 4"
+    description: >
+      Claim end date is earlier than the claim start date.
+    scope: claim
+    logic:
+      type: date_compare
+      left: ClaimEndDt
+      operator: before
+      right: ClaimStartDt
+    summary_template: >
+      Submitted {n} claim(s) where the service end date precedes the
+      service start date.
+    notes: >
+      Usually a data-entry error rather than intent, which is why this is
+      waste and not fraud. Still a real integrity finding.
+
+  - rule_id: SERVICE_BEFORE_BIRTH
+    category: fraud
+    severity: high
+    citation: "TODO — PIM Chapter 4"
+    description: >
+      Claim service date falls before the beneficiary's date of birth.
+    scope: claim
+    logic:
+      type: date_compare
+      left: ClaimStartDt
+      operator: before
+      right: DOB
+      requires: [DOB]
+    summary_template: >
+      Billed {n} service(s) dated before the beneficiary's date of birth.
+    notes: >
+      Only enable if DOB is present in the beneficiary table. If the column
+      is missing, the engine should skip this rule silently, not crash.
+
+  - rule_id: OVERLAPPING_INPATIENT
+    category: abuse
+    severity: medium
+    citation: "TODO — PIM Chapter 4"
+    description: >
+      The same beneficiary has two inpatient stays whose date ranges
+      overlap.
+    scope: beneficiary
+    logic:
+      type: interval_overlap
+      group_by: [BeneID]
+      start: ClaimStartDt
+      end: ClaimEndDt
+      filter: {claim_type: inpatient}
+      min_overlaps: 1
+    summary_template: >
+      Associated with {n} inpatient stay(s) that overlap another
+      inpatient stay for the same beneficiary.
+    notes: >
+      A patient cannot be admitted in two places at once. Overlap across
+      two different providers is the more interesting case — flag both.
+
+  # ---------------------------------------------------------------------
+  # TIER 2 — duplicate and coordination patterns
+  # Not strictly impossible, but not explainable by honest billing either.
+  # ---------------------------------------------------------------------
+
+  - rule_id: DUPLICATE_CLAIM
+    category: waste
+    severity: medium
+    citation: "TODO — PIM Chapter 4, duplicate claims"
+    description: >
+      Two or more claims share provider, beneficiary, start date, end date,
+      and reimbursed amount.
+    scope: claim
+    logic:
+      type: exact_duplicate
+      match_on:
+        - Provider
+        - BeneID
+        - ClaimStartDt
+        - ClaimEndDt
+        - InscClaimAmtReimbursed
+      min_count: 2
+    summary_template: >
+      Submitted {n} claim(s) that exactly duplicate another claim on
+      beneficiary, service dates, and reimbursed amount.
+    notes: >
+      Check the fire rate carefully. Synthetic data often contains legitimate
+      repeats. If this fires on more than ~20% of providers, tighten the
+      match keys before shipping.
+
+  - rule_id: SAME_DAY_BENE_MULTI_PROVIDER
+    category: abuse
+    severity: medium
+    citation: "TODO — PIM Chapter 4"
+    description: >
+      The same beneficiary was billed by two or more distinct providers on
+      the same service date.
+    scope: beneficiary
+    logic:
+      type: distinct_count
+      group_by: [BeneID, ClaimStartDt]
+      count_distinct: Provider
+      operator: gte
+      value: 2
+    summary_template: >
+      Billed for {n} beneficiary-day(s) where at least one other provider
+      also billed the same beneficiary on the same date.
+    notes: >
+      Legitimate on its own — referrals and transfers happen. Becomes
+      meaningful when it repeats across many beneficiaries with the same
+      set of providers. Keep severity at medium.
+
+  # ---------------------------------------------------------------------
+  # TIER 3 — review triggers
+  # These contain a number we chose, not a number CMS published.
+  # Kept at low severity and worded as prompts for review, never as
+  # findings of wrongdoing.
+  # ---------------------------------------------------------------------
+
+  - rule_id: SAME_DAY_REPEAT
+    category: abuse
+    severity: low
+    citation: "TODO — NCCI Policy Manual, MUE concept (outpatient claims only)"
+    description: >
+      Unusually many claims for the same provider, beneficiary, and service
+      date.
+    scope: claim
+    logic:
+      type: group_count
+      group_by: [Provider, BeneID, ClaimStartDt]
+      operator: gte
+      value: 5
+    summary_template: >
+      Recorded {n} beneficiary-day(s) with five or more separate claims for
+      the same beneficiary on a single service date.
+    notes: >
+      The threshold of 5 is ours, not CMS's. The underlying concept maps to
+      Medically Unlikely Edits, but we do not have the MUE tables, so we
+      cannot cite a specific unit limit. Keep severity low and word the
+      summary as an observation. Restrict to outpatient claims if citing NCCI.
+
+  - rule_id: SHORT_STAY_HIGH_COST
+    category: abuse
+    severity: low
+    citation: "TODO — PIM Chapter 4"
+    description: >
+      Inpatient stay of two days or fewer with a very high reimbursed
+      amount.
+    scope: claim
+    logic:
+      type: compound
+      all_of:
+        - {type: date_diff, start: ClaimStartDt, end: ClaimEndDt, operator: lte, value: 2}
+        - {type: numeric, field: InscClaimAmtReimbursed, operator: gt, value: 30000}
+      filter: {claim_type: inpatient}
+    summary_template: >
+      Billed {n} inpatient claim(s) with a stay of two days or fewer and a
+      reimbursed amount above $30,000.
+    notes: >
+      OPTIONAL — build only if time allows. The shape is a genuine fraud
+      pattern, but the $30,000 figure is ours. Low severity, and the summary
+      must describe the combination without calling it improper.

@@ -66,6 +66,46 @@
         "value": 71000.0,
         "impact": 0.6033311486244202,
         "direction": "increases_risk"
+      },
+      {
+        "category": "abuse",
+        "severity": "medium",
+        "summary": "Associated with 4 inpatient stay(s) that overlap another inpatient stay for the same beneficiary.",
+        "type": "rule",
+        "rule_id": "OVERLAPPING_INPATIENT",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 4,
+        "relates_to": null
+      },
+      {
+        "category": "waste",
+        "severity": "medium",
+        "summary": "Submitted 2 claim(s) that exactly duplicate another claim on beneficiary, service dates, and reimbursed amount.",
+        "type": "rule",
+        "rule_id": "DUPLICATE_CLAIM",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4, duplicate claims",
+        "claims_affected": 2,
+        "relates_to": null
+      },
+      {
+        "category": "abuse",
+        "severity": "medium",
+        "summary": "Billed for 9 beneficiary-day(s) where at least one other provider also billed the same beneficiary on the same date.",
+        "type": "rule",
+        "rule_id": "SAME_DAY_BENE_MULTI_PROVIDER",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 9,
+        "relates_to": null
+      },
+      {
+        "category": "abuse",
+        "severity": "low",
+        "summary": "Billed 1 inpatient claim(s) with a stay of two days or fewer and a reimbursed amount above $30,000.",
+        "type": "rule",
+        "rule_id": "SHORT_STAY_HIGH_COST",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 1,
+        "relates_to": null
       }
     ],
     "clearance_summary": null
@@ -137,6 +177,46 @@
         "value": 1334.0,
         "impact": 0.6862794160842896,
         "direction": "increases_risk"
+      },
+      {
+        "category": "abuse",
+        "severity": "medium",
+        "summary": "Associated with 4 inpatient stay(s) that overlap another inpatient stay for the same beneficiary.",
+        "type": "rule",
+        "rule_id": "OVERLAPPING_INPATIENT",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 4,
+        "relates_to": null
+      },
+      {
+        "category": "waste",
+        "severity": "medium",
+        "summary": "Submitted 2 claim(s) that exactly duplicate another claim on beneficiary, service dates, and reimbursed amount.",
+        "type": "rule",
+        "rule_id": "DUPLICATE_CLAIM",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4, duplicate claims",
+        "claims_affected": 2,
+        "relates_to": null
+      },
+      {
+        "category": "abuse",
+        "severity": "medium",
+        "summary": "Billed for 26 beneficiary-day(s) where at least one other provider also billed the same beneficiary on the same date.",
+        "type": "rule",
+        "rule_id": "SAME_DAY_BENE_MULTI_PROVIDER",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 26,
+        "relates_to": null
+      },
+      {
+        "category": "abuse",
+        "severity": "low",
+        "summary": "Billed 1 inpatient claim(s) with a stay of two days or fewer and a reimbursed amount above $30,000.",
+        "type": "rule",
+        "rule_id": "SHORT_STAY_HIGH_COST",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 1,
+        "relates_to": null
       }
     ],
     "clearance_summary": null
@@ -210,7 +290,7 @@
         "direction": "decreases_risk"
       }
     ],
-    "clearance_summary": "Not flagged. Avg beneficiary age at claim of 76 years \u2014 82nd percentile, far above the median provider of 73 years. Reduces risk. States spanning claims of 1 \u2014 53rd percentile, near the median provider of 1. Reduces risk. Avg diagnosis codes per claim of 5.5 \u2014 89th percentile, far above the median provider of 2.8. Reduces risk. Avg admission length of 6.2 days \u2014 89th percentile, far above the median provider of 0.0 days. Reduces risk. Inpatient claims submitted of 25 \u2014 93rd percentile, far above the median provider of 0. Reduces risk. Score 0.33, below the review threshold of 0.50. 0 of 0 rules checked, none fired."
+    "clearance_summary": "Not flagged. Avg beneficiary age at claim of 76 years \u2014 82nd percentile, far above the median provider of 73 years. Reduces risk. States spanning claims of 1 \u2014 53rd percentile, near the median provider of 1. Reduces risk. Avg diagnosis codes per claim of 5.5 \u2014 89th percentile, far above the median provider of 2.8. Reduces risk. Avg admission length of 6.2 days \u2014 89th percentile, far above the median provider of 0.0 days. Reduces risk. Inpatient claims submitted of 25 \u2014 93rd percentile, far above the median provider of 0. Reduces risk. Score 0.33, below the review threshold of 0.50. 8 rules checked, none fired."
   },
   "false_positive": {
     "provider_id": "PRV51456",
@@ -279,6 +359,16 @@
         "value": 1.962962962962963,
         "impact": -0.5404398441314697,
         "direction": "decreases_risk"
+      },
+      {
+        "category": "abuse",
+        "severity": "medium",
+        "summary": "Billed for 1 beneficiary-day(s) where at least one other provider also billed the same beneficiary on the same date.",
+        "type": "rule",
+        "rule_id": "SAME_DAY_BENE_MULTI_PROVIDER",
+        "citation": "TODO \u00e2\u20ac\u201d PIM Chapter 4",
+        "claims_affected": 1,
+        "relates_to": null
       }
     ],
     "clearance_summary": null
