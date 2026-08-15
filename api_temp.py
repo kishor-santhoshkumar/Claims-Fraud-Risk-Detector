@@ -33,6 +33,7 @@ from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ── Project path setup ────────────────────────────────────────────────────────
@@ -63,19 +64,46 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ── In-memory store loaded at startup ─────────────────────────────────────────
+# ── CORS ──────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── In-memory stores ──────────────────────────────────────────────────────────
 _PROVIDERS: dict[str, ScoredProvider] = {}
 _TIER_COUNTS: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
+
+# Enrichment data: provider_id → {n_unique_bene, state}
+_ENRICHMENT: dict[str, dict] = {}
+
+# Disposition store — persists in memory for the session
+_DISPOSITIONS: dict[str, str] = {}
+
+# Lazy claims cache — loaded on first /provider/{id}/claims call
+_CLAIMS_DF: dict[str, pd.DataFrame | None] = {"ip": None, "op": None}
+
+# CMS state code → abbreviation (Medicare beneficiary CSV uses numeric codes)
+_CMS_STATE: dict[str, str] = {
+    "1": "AL", "2": "AK", "3": "AZ", "4": "AR", "5": "CA", "6": "CO",
+    "7": "CT", "8": "DE", "9": "DC", "10": "FL", "11": "GA", "12": "HI",
+    "13": "ID", "14": "IL", "15": "IN", "16": "IA", "17": "KS", "18": "KY",
+    "19": "LA", "20": "ME", "21": "MD", "22": "MA", "23": "MI", "24": "MN",
+    "25": "MS", "26": "MO", "27": "MT", "28": "NE", "29": "NV", "30": "NH",
+    "31": "NJ", "32": "NM", "33": "NY", "34": "NC", "35": "ND", "36": "OH",
+    "37": "OK", "38": "OR", "39": "PA", "40": "RI", "41": "SC", "42": "SD",
+    "43": "TN", "44": "TX", "45": "UT", "46": "VT", "47": "VA", "48": "WA",
+    "49": "WV", "50": "WI", "51": "WY", "52": "PR", "53": "VI", "54": "GU",
+}
 
 
 @app.on_event("startup")
 def _load_providers() -> None:
     path = OUTPUTS / "scored_providers.json"
     if not path.exists():
-        print(
-            f"[api_temp] WARNING: {path} not found. "
-            "Run Section 12 of the notebook to generate it."
-        )
+        print(f"[api_temp] WARNING: {path} not found.")
         return
     with open(path) as fh:
         records = json.load(fh)
@@ -88,6 +116,54 @@ def _load_providers() -> None:
         f"high={_TIER_COUNTS['high']}  medium={_TIER_COUNTS['medium']}  "
         f"low={_TIER_COUNTS['low']}"
     )
+    _load_enrichment()
+
+
+def _load_enrichment() -> None:
+    """Build provider → {n_unique_bene, state} lookup from parquet + CSVs."""
+    # n_unique_bene from features_train.parquet
+    feat_path = OUTPUTS / "features_train.parquet"
+    if feat_path.exists():
+        try:
+            feat = pd.read_parquet(feat_path, columns=["Provider", "n_unique_bene"])
+            for _, row in feat.iterrows():
+                pid = str(row["Provider"])
+                _ENRICHMENT.setdefault(pid, {})["n_unique_bene"] = int(row.get("n_unique_bene", 0) or 0)
+        except Exception as e:
+            print(f"[api_temp] Could not load n_unique_bene: {e}")
+
+    # State from beneficiary CSV (only BeneID + State columns needed)
+    data_dir = ROOT / "data"
+    bene_files = list(data_dir.glob("Train_Beneficiarydata*.csv"))
+    ip_files = list(data_dir.glob("Train_Inpatientdata*.csv"))
+    op_files = list(data_dir.glob("Train_Outpatientdata*.csv"))
+
+    if not (bene_files and (ip_files or op_files)):
+        print("[api_temp] CSV files not found — state enrichment skipped.")
+        return
+
+    try:
+        bene = pd.read_csv(bene_files[0], usecols=["BeneID", "State"], dtype=str)
+        bene_state = dict(zip(bene["BeneID"], bene["State"]))
+
+        frames = []
+        if ip_files:
+            frames.append(pd.read_csv(ip_files[0], usecols=["BeneID", "Provider"], dtype=str))
+        if op_files:
+            frames.append(pd.read_csv(op_files[0], usecols=["BeneID", "Provider"], dtype=str))
+
+        claims_slim = pd.concat(frames, ignore_index=True).dropna()
+        claims_slim["state"] = claims_slim["BeneID"].map(bene_state)
+        # Take the mode state per provider
+        for pid, grp in claims_slim.groupby("Provider"):
+            mode = grp["state"].dropna().mode()
+            if not mode.empty:
+                numeric = str(mode.iloc[0])
+                abbr = _CMS_STATE.get(numeric, numeric)
+                _ENRICHMENT.setdefault(str(pid), {})["state"] = abbr
+        print(f"[api_temp] State enrichment done for {len(_ENRICHMENT):,} providers.")
+    except Exception as e:
+        print(f"[api_temp] State enrichment failed: {e}")
 
 
 # ── Lazy model cache for POST /score ─────────────────────────────────────────
@@ -368,4 +444,273 @@ def score_provider(features: ProviderFeatures):
         expected_loss=score * total_reimb,
         n_claims=n_claims_val,
         evidence=[e.model_dump() for e in evidence],
+    )
+
+
+# ── Frontend endpoints ─────────────────────────────────────────────────────────
+
+
+class QueueItem(BaseModel):
+    provider_id: str
+    score: float
+    risk_tier: Literal["low", "medium", "high"]
+    total_reimbursed: float
+    expected_loss: float
+    n_claims: int
+    status: str
+    n_unique_bene: Optional[int] = None
+    state: Optional[str] = None
+
+
+class ClaimRow(BaseModel):
+    claim_id: str
+    bene_id: str
+    claim_start_dt: str
+    claim_end_dt: str
+    claim_type: Literal["inpatient", "outpatient"]
+    amount_reimbursed: float
+    deductible_paid: float
+    attending_physician: Optional[str]
+    diagnosis_codes: list[str]
+    procedure_codes: list[str]
+    admission_dt: Optional[str]
+    discharge_dt: Optional[str]
+    rule_flag: Optional[str] = None
+
+
+class ClaimsResponse(BaseModel):
+    provider_id: str
+    total_claims: int
+    page: int
+    per_page: int
+    claims: list[ClaimRow]
+
+
+class ProviderDetail(BaseModel):
+    """Full provider record enriched with enrichment data and disposition."""
+    provider_id: str
+    score: float
+    risk_tier: Literal["low", "medium", "high"]
+    total_reimbursed: float
+    expected_loss: float
+    n_claims: int
+    evidence: list
+    clearance_summary: Optional[str]
+    status: str
+    n_unique_bene: Optional[int] = None
+    state: Optional[str] = None
+
+
+class DispositionBody(BaseModel):
+    disposition: Literal["confirmed", "cleared", "needs_info"]
+    note: str = ""
+
+
+class StatsResponse(BaseModel):
+    total_providers: int
+    tier_distribution: dict
+    total_expected_loss: float
+    total_reimbursed: float
+    providers_flagged: int
+    by_state: list
+
+
+def _enrich(provider_id: str) -> dict:
+    return _ENRICHMENT.get(provider_id, {})
+
+
+def _get_claims_df() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Lazy-load and cache the inpatient and outpatient claim dataframes."""
+    data_dir = ROOT / "data"
+    if _CLAIMS_DF["ip"] is None:
+        ip_files = list(data_dir.glob("Train_Inpatientdata*.csv"))
+        _CLAIMS_DF["ip"] = pd.read_csv(ip_files[0], dtype=str) if ip_files else pd.DataFrame()
+    if _CLAIMS_DF["op"] is None:
+        op_files = list(data_dir.glob("Train_Outpatientdata*.csv"))
+        _CLAIMS_DF["op"] = pd.read_csv(op_files[0], dtype=str) if op_files else pd.DataFrame()
+    return _CLAIMS_DF["ip"], _CLAIMS_DF["op"]  # type: ignore[return-value]
+
+
+def _safe_float(val, default: float = 0.0) -> float:
+    """Convert val to float, returning default for None / NaN / non-numeric."""
+    try:
+        result = float(val)
+        return default if (result != result) else result  # nan check
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_str(val) -> str | None:
+    """Return None for pandas NaN/NaT, otherwise a stripped string."""
+    if val is None:
+        return None
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip()
+    return None if s in ("", "nan", "NaT", "None") else s
+
+
+def _parse_claim(row: dict, claim_type: str) -> ClaimRow:
+    def codes(cols: list[str]) -> list[str]:
+        return [str(row[c]) for c in cols if c in row and pd.notna(row[c]) and str(row[c]) not in ("", "nan")]
+
+    diag_cols = [f"ClmDiagnosisCode_{i}" for i in range(1, 11)]
+    proc_cols = [f"ClmProcedureCode_{i}" for i in range(1, 7)]
+
+    start = _safe_str(row.get("ClaimStartDt")) or ""
+    end   = _safe_str(row.get("ClaimEndDt")) or ""
+
+    return ClaimRow(
+        claim_id=_safe_str(row.get("ClaimID")) or "",
+        bene_id=_safe_str(row.get("BeneID")) or "",
+        claim_start_dt=start[:10],
+        claim_end_dt=end[:10],
+        claim_type=claim_type,  # type: ignore[arg-type]
+        amount_reimbursed=_safe_float(row.get("InscClaimAmtReimbursed")),
+        deductible_paid=_safe_float(row.get("DeductibleAmtPaid")),
+        attending_physician=_safe_str(row.get("AttendingPhysician")),
+        diagnosis_codes=codes(diag_cols),
+        procedure_codes=codes(proc_cols),
+        admission_dt=_safe_str(row.get("AdmissionDt"))[:10] if claim_type == "inpatient" and _safe_str(row.get("AdmissionDt")) else None,
+        discharge_dt=_safe_str(row.get("DischargeDt"))[:10] if claim_type == "inpatient" and _safe_str(row.get("DischargeDt")) else None,
+    )
+
+
+@app.get("/queue", response_model=list[QueueItem], summary="Top N providers by expected loss")
+def get_queue(limit: int = Query(100, ge=1, le=5500)):
+    """Return the top N providers ranked by expected_loss descending.
+
+    Includes disposition status and basic enrichment (n_unique_bene, state).
+    """
+    sorted_providers = sorted(_PROVIDERS.values(), key=lambda p: p.expected_loss, reverse=True)
+    results = []
+    for p in sorted_providers[:limit]:
+        enr = _enrich(p.provider_id)
+        results.append(QueueItem(
+            provider_id=p.provider_id,
+            score=p.score,
+            risk_tier=p.risk_tier,
+            total_reimbursed=p.total_reimbursed,
+            expected_loss=p.expected_loss,
+            n_claims=p.n_claims,
+            status=_DISPOSITIONS.get(p.provider_id, "unreviewed"),
+            n_unique_bene=enr.get("n_unique_bene"),
+            state=enr.get("state"),
+        ))
+    return results
+
+
+@app.get("/provider/{provider_id}", response_model=ProviderDetail, summary="Full provider detail")
+def get_provider_detail(provider_id: str):
+    """Full ScoredProvider with evidence array, enrichment, and current disposition."""
+    p = _PROVIDERS.get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    enr = _enrich(provider_id)
+    return ProviderDetail(
+        provider_id=p.provider_id,
+        score=p.score,
+        risk_tier=p.risk_tier,
+        total_reimbursed=p.total_reimbursed,
+        expected_loss=p.expected_loss,
+        n_claims=p.n_claims,
+        evidence=[e.model_dump() for e in p.evidence],
+        clearance_summary=p.clearance_summary,
+        status=_DISPOSITIONS.get(provider_id, "unreviewed"),
+        n_unique_bene=enr.get("n_unique_bene"),
+        state=enr.get("state"),
+    )
+
+
+@app.get("/provider/{provider_id}/claims", response_model=ClaimsResponse, summary="Individual claims for a provider")
+def get_provider_claims(
+    provider_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Paginated claim-level detail from the Kaggle CSVs. Returns 404 if provider unknown."""
+    if provider_id not in _PROVIDERS:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+
+    ip_df, op_df = _get_claims_df()
+
+    rows: list[ClaimRow] = []
+    if not ip_df.empty and "Provider" in ip_df.columns:
+        sub = ip_df[ip_df["Provider"] == provider_id]
+        for _, r in sub.iterrows():
+            rows.append(_parse_claim(r.to_dict(), "inpatient"))
+
+    if not op_df.empty and "Provider" in op_df.columns:
+        sub = op_df[op_df["Provider"] == provider_id]
+        for _, r in sub.iterrows():
+            rows.append(_parse_claim(r.to_dict(), "outpatient"))
+
+    rows.sort(key=lambda c: c.claim_start_dt)
+    total = len(rows)
+    start = (page - 1) * per_page
+    return ClaimsResponse(
+        provider_id=provider_id,
+        total_claims=total,
+        page=page,
+        per_page=per_page,
+        claims=rows[start : start + per_page],
+    )
+
+
+@app.post("/provider/{provider_id}/disposition", summary="Set reviewer disposition")
+def set_disposition(provider_id: str, body: DispositionBody):
+    """Record a reviewer decision (confirmed / cleared / needs_info).
+
+    Stored in memory for the session. Returns the updated provider detail.
+    """
+    if provider_id not in _PROVIDERS:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    _DISPOSITIONS[provider_id] = body.disposition
+    return {"provider_id": provider_id, "status": body.disposition, "note": body.note}
+
+
+@app.get("/stats", response_model=StatsResponse, summary="Aggregate analytics for the dashboard")
+def get_stats():
+    """Counts, totals, and per-state distribution across all 5,410 providers."""
+    by_state: dict[str, int] = {}
+    total_loss = 0.0
+    total_reimb = 0.0
+
+    for p in _PROVIDERS.values():
+        total_loss += p.expected_loss
+        total_reimb += p.total_reimbursed
+        state = _enrich(p.provider_id).get("state", "??")
+        by_state[state] = by_state.get(state, 0) + 1
+
+    state_list = sorted(
+        [{"state": s, "providers": c} for s, c in by_state.items()],
+        key=lambda x: x["providers"],
+        reverse=True,
+    )
+
+    return StatsResponse(
+        total_providers=len(_PROVIDERS),
+        tier_distribution=dict(_TIER_COUNTS),
+        total_expected_loss=round(total_loss, 2),
+        total_reimbursed=round(total_reimb, 2),
+        providers_flagged=_TIER_COUNTS["high"] + _TIER_COUNTS["medium"],
+        by_state=state_list[:20],
+    )
+
+
+@app.get("/provider/{provider_id}/explain", summary="LLM explanation (not yet implemented)")
+def explain_provider(provider_id: str):
+    """Returns 501 — the LLM narrator is not yet implemented.
+
+    The frontend wires the Explain button to this endpoint now; the narrative
+    implementation drops in here later without requiring a frontend change.
+    """
+    if provider_id not in _PROVIDERS:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    raise HTTPException(
+        status_code=501,
+        detail="LLM narrator not yet implemented. Check back after the narrative integration.",
     )

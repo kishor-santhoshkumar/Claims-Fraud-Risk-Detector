@@ -1,1 +1,20 @@
 __pycache__/
+*.pyc
+*.pyo
+.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/src/routeTree.gen.ts
+
+# Model / data outputs
+outputs/model_cache.ubj
+outputs/chroma_db/
+outputs/bm25_index.pkl
+
+# Datasets (CMS data not redistributable)
+data/
+LEIE/
+
