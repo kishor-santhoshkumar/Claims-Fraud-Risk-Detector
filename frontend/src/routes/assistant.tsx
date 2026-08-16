@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCaseStore } from "@/lib/caseStore";
-import { type CaseProvider } from "@/lib/caseStore";
-import { formatMoneyFull } from "@/lib/mockData";
+import { chatWithAssistant } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assistant")({
@@ -13,25 +12,14 @@ interface Msg {
   id: number;
   role: "user" | "assistant";
   text: string;
+  error?: boolean;
 }
 
-function replyFor(providers: CaseProvider[], text: string): string {
-  const tags = [...text.matchAll(/@([A-Za-z0-9-]+)/g)].map((m) => (m[1] ?? "").toUpperCase()).filter(Boolean);
-  if (tags.length === 0) {
-    return 'Tag a provider to start, for example "@PRV-0001 why is this flagged?". Responses in this build are canned demo text.';
-  }
-  return tags
-    .map((id) => {
-      const p = providers.find((x) => x.provider_id === id);
-      if (!p) return `No provider matches ${id} in this dataset.`;
-      return [
-        `${p.provider_id} - ${p.risk_tier} risk, score ${p.score.toFixed(2)}, ${formatMoneyFull(p.expected_loss)} at risk.`,
-        `${p.n_claims.toLocaleString()} claims, ${p.n_unique_bene?.toLocaleString() ?? "-"} beneficiaries, ${p.state ?? "-"}. Status: ${p.status.replace("_", " ")}.`,
-        "Open the case file for full evidence details.",
-        "Demo response - no model is connected yet.",
-      ].join("\n");
-    })
-    .join("\n\n");
+/** Extract provider IDs from @mentions in a message. */
+function extractProviderIds(text: string): string[] {
+  return [...text.matchAll(/@([A-Za-z0-9]+)/g)]
+    .map((m) => (m[1] ?? "").toUpperCase())
+    .filter(Boolean);
 }
 
 function Assistant() {
@@ -40,15 +28,17 @@ function Assistant() {
     {
       id: 0,
       role: "assistant",
-      text: 'Tag a provider with @ to ask about a case. Try "@PRV-0001 summarise the evidence".',
+      text: "Ask me anything about the Medicare fraud review. Tag a provider with @ to include their evidence — for example: \"@PRV52985 why was this provider flagged?\"",
     },
   ]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Autocomplete suggestions when typing @...
   const suggestions = useMemo(() => {
-    const q = input.match(/@([A-Za-z0-9-]*)$/);
+    const q = input.match(/@([A-Za-z0-9]*)$/);
     if (!q) return [];
     const term = (q[1] ?? "").toUpperCase();
     return providers
@@ -60,17 +50,34 @@ function Assistant() {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages, pending]);
 
-  const send = (e: React.FormEvent) => {
+  const send = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
     if (!text || pending) return;
+
     setInput("");
-    setMessages((m) => [...m, { id: m.length, role: "user", text }]);
+    const userMsg: Msg = { id: Date.now(), role: "user", text };
+    setMessages((m) => [...m, userMsg]);
     setPending(true);
-    setTimeout(() => {
-      setMessages((m) => [...m, { id: m.length, role: "assistant", text: replyFor(providers, text) }]);
+
+    const providerIds = extractProviderIds(text);
+
+    try {
+      const reply = await chatWithAssistant(text, providerIds);
+      setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", text: reply }]);
+    } catch {
+      setMessages((m) => [
+        ...m,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          text: "Sorry, the assistant is unavailable right now. The LLM service may be rate-limited — try again in a moment.",
+          error: true,
+        },
+      ]);
+    } finally {
       setPending(false);
-    }, 700);
+    }
   };
 
   return (
@@ -78,7 +85,7 @@ function Assistant() {
       <header className="border-b border-border px-6 py-4">
         <h1 className="text-[15px] font-medium">Case assistant</h1>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Demo only - tag a provider with @PRV-0001 - canned responses, no model connected
+          Ask general questions or tag a provider with @PRVXXXXX to get evidence-grounded answers
         </p>
       </header>
 
@@ -91,11 +98,23 @@ function Assistant() {
                   {m.text}
                 </span>
               ) : (
-                <p className="whitespace-pre-wrap leading-relaxed text-foreground">{m.text}</p>
+                <p
+                  className={cn(
+                    "whitespace-pre-wrap leading-relaxed",
+                    m.error ? "text-muted-foreground italic" : "text-foreground",
+                  )}
+                >
+                  {m.text}
+                </p>
               )}
             </div>
           ))}
-          {pending && <p className="text-[13px] text-muted-foreground">Thinking...</p>}
+          {pending && (
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+              <span className="animate-pulse">●</span>
+              <span>Thinking…</span>
+            </div>
+          )}
           <div ref={endRef} />
         </div>
       </div>
@@ -108,19 +127,24 @@ function Assistant() {
                 <button
                   key={p.provider_id}
                   type="button"
-                  onClick={() => setInput((v) => v.replace(/@([A-Za-z0-9-]*)$/, `@${p.provider_id} `))}
+                  onClick={() => {
+                    setInput((v) => v.replace(/@([A-Za-z0-9]*)$/, `@${p.provider_id} `));
+                    inputRef.current?.focus();
+                  }}
                   className="border border-border px-2 py-1 font-mono text-[12px] hover:bg-muted"
                 >
                   {p.provider_id}
+                  <span className="ml-1.5 text-muted-foreground">{p.risk_tier}</span>
                 </button>
               ))}
             </div>
           )}
           <div className="flex gap-2">
             <input
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about @PRV-0001..."
+              placeholder='Ask anything, or "@PRV52985 why was this flagged?"'
               className="flex-1 border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/40"
             />
             <button

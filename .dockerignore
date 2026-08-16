@@ -1,0 +1,15 @@
+data/
+LEIE/
+policy_docs/
+.git/
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+notebooks/
+scripts/
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+outputs/model_cache.ubj
+.env

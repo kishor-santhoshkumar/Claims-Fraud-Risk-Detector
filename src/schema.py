@@ -90,9 +90,30 @@ class PeerEvidence(_BaseEvidence):
     peer_group: str  # description of the comparison cohort
 
 
+class PolicyEvidence(_BaseEvidence):
+    """Policy corpus citation attached to a RuleEvidence finding.
+
+    One PolicyEvidence is appended after each RuleEvidence whose rule_id
+    retrieves a relevant chunk from the hybrid retrieval layer. It carries
+    the policy authority that the rule is grounded in.
+
+    - category mirrors the parent RuleEvidence (same FWAC label).
+    - severity is always null — policy citations are not severity ratings.
+    - summary is always "Authority: {citation_string}".
+    """
+
+    type: Literal["policy"] = "policy"
+    severity: None = None  # always null — policy items carry no severity rating
+    citation_string: str
+    section_title: str
+    source_doc: str
+    excerpt: str          # first 300 chars of the chunk text
+    relates_to: str       # rule_id of the parent RuleEvidence
+
+
 # Discriminated union — consumers switch on `type` without inspecting every field.
 Evidence = Annotated[
-    Union[ShapEvidence, RuleEvidence, ExclusionEvidence, PeerEvidence],
+    Union[ShapEvidence, RuleEvidence, ExclusionEvidence, PeerEvidence, PolicyEvidence],
     Field(discriminator="type"),
 ]
 

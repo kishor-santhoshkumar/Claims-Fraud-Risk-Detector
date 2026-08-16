@@ -148,7 +148,7 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
         <EvidenceList evidence={provider.evidence} />
       </div>
 
-      {variant === "clearance" && provider.clearance_summary && (
+      {variant === "clearance" && provider.clearance_summary && !explaining && (
         <p className="mt-3 text-[13px] text-muted-foreground">{provider.clearance_summary}</p>
       )}
 

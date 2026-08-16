@@ -151,6 +151,12 @@ export interface DispositionResponse {
   note: string;
 }
 
+export interface NarrativeResponse {
+  narrative: string;
+  evidence: Evidence[];
+  cached: boolean;
+}
+
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -268,34 +274,46 @@ export async function setDisposition(
   });
 }
 
-/** Returns null on 501 (narrator not ready), throws on other errors. */
+/** POST /provider/{id}/explain — returns narrative + enriched evidence with policy citations. */
 export async function fetchExplanation(
   id: string,
-): Promise<string[] | null> {
+): Promise<NarrativeResponse | null> {
   if (USE_MOCK) return null;
   try {
-    const data = await apiFetch<{ paragraphs: string[] }>(
-      `/provider/${id}/explain`,
-    );
-    return data.paragraphs;
+    return await apiFetch<NarrativeResponse>(`/provider/${id}/explain`, {
+      method: "POST",
+    });
   } catch (err: unknown) {
-    if ((err as { status?: number }).status === 501) return null;
+    const status = (err as { status?: number }).status;
+    if (status === 400 || status === 503 || status === 501) return null;
     throw err;
   }
 }
 
-/** Returns clearance_summary string or null on 501. */
+/** POST /provider/{id}/why-not — on-demand clearance narrative for low/medium tier. */
 export async function fetchClearance(
   id: string,
-): Promise<string | null> {
+): Promise<NarrativeResponse | null> {
   if (USE_MOCK) return null;
   try {
-    const data = await apiFetch<{ clearance_summary: string }>(
-      `/provider/${id}/why-not`,
-    );
-    return data.clearance_summary ?? null;
+    return await apiFetch<NarrativeResponse>(`/provider/${id}/why-not`, {
+      method: "POST",
+    });
   } catch (err: unknown) {
-    if ((err as { status?: number }).status === 501) return null;
+    const status = (err as { status?: number }).status;
+    if (status === 400 || status === 503 || status === 501) return null;
     throw err;
   }
+}
+
+/** POST /chat — general assistant with optional provider evidence context. */
+export async function chatWithAssistant(
+  message: string,
+  providerIds: string[] = [],
+): Promise<string> {
+  const data = await apiFetch<{ reply: string }>("/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, provider_ids: providerIds }),
+  });
+  return data.reply;
 }

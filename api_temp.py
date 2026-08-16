@@ -32,6 +32,7 @@ from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -41,6 +42,8 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+load_dotenv(ROOT / ".env")
+
 from src.schema import ScoredProvider  # noqa: E402
 from src.export import (  # noqa: E402
     OUTPUTS,
@@ -49,6 +52,8 @@ from src.export import (  # noqa: E402
     _risk_tier,
     _build_shap_evidence,
 )
+from src.evidence_assembler import assemble  # noqa: E402
+from src.narrator import narrate_case, narrate_clearance  # noqa: E402
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -364,15 +369,10 @@ def get_provider(provider_id: str):
 @app.get(
     "/provider/{provider_id}/why-not",
     response_model=ClearanceResponse,
-    summary="Why this provider was not flagged",
+    summary="Why this provider was not flagged (legacy — returns pre-computed summary)",
 )
-def why_not_flagged(provider_id: str):
-    """Plain-English clearance narrative for a non-flagged (low or medium tier) provider.
-
-    Returns HTTP 400 if the provider is flagged (risk_tier=high) — flagged providers
-    have a case file, not a clearance summary; use GET /providers/{provider_id} instead.
-    Returns HTTP 404 if the provider ID is not found.
-    """
+def why_not_flagged_get(provider_id: str):
+    """Pre-computed clearance summary. Use POST /provider/{id}/why-not for LLM narration."""
     p = _PROVIDERS.get(provider_id)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
@@ -380,8 +380,7 @@ def why_not_flagged(provider_id: str):
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Provider '{provider_id}' is flagged (tier=high, score={p.score:.4f}). "
-                "Flagged providers have a case file, not a clearance summary. "
+                f"Provider '{provider_id}' is flagged (tier=high). "
                 "Use GET /providers/{provider_id} for the full evidence record."
             ),
         )
@@ -390,6 +389,114 @@ def why_not_flagged(provider_id: str):
         risk_tier=p.risk_tier,
         score=p.score,
         clearance_summary=p.clearance_summary or "",
+    )
+
+
+class NarrativeResponse(BaseModel):
+    narrative: str
+    evidence: list
+    cached: bool
+
+
+@app.post(
+    "/provider/{provider_id}/explain",
+    response_model=NarrativeResponse,
+    summary="LLM investigation narrative for a flagged provider",
+)
+def explain_provider_post(provider_id: str):
+    """Generate a two-paragraph investigation narrative for a high or medium tier provider.
+
+    Runs the evidence assembler first (attaches policy citations to rule findings),
+    then calls the Groq narrator. Results are cached — repeat calls return instantly.
+
+    Returns 400 for low-tier providers (use POST /provider/{id}/why-not instead).
+    Returns 503 if all Groq keys are rate-limited; evidence is still returned.
+    """
+    p = _PROVIDERS.get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    if p.risk_tier == "low":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Provider '{provider_id}' is low tier. "
+                "Low-tier providers have a clearance summary, not a case narrative. "
+                "Use POST /provider/{provider_id}/why-not instead."
+            ),
+        )
+
+    enriched = assemble(p)
+    from src.narrator import _load_cache
+    cache = _load_cache()
+    cache_key = f"case_{provider_id}"
+    was_cached = cache_key in cache
+
+    narrative = narrate_case(enriched)
+    if narrative is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "All Groq API keys are currently rate-limited. "
+                "The evidence record is available but prose narration is unavailable. "
+                "Retry in a few minutes."
+            ),
+        )
+
+    return NarrativeResponse(
+        narrative=narrative,
+        evidence=[e.model_dump() for e in enriched.evidence],
+        cached=was_cached,
+    )
+
+
+@app.post(
+    "/provider/{provider_id}/why-not",
+    response_model=NarrativeResponse,
+    summary="LLM clearance narrative for a non-flagged provider (on demand)",
+)
+def why_not_flagged_post(provider_id: str):
+    """Generate a one-paragraph clearance narrative for a low or medium tier provider.
+
+    Called on demand only — clearance narratives are never pre-generated.
+    Cached after first generation.
+
+    Returns 400 for high-tier providers (use POST /provider/{id}/explain instead).
+    Returns 503 if all Groq keys are rate-limited; evidence is still returned.
+    """
+    p = _PROVIDERS.get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
+    if p.risk_tier == "high":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Provider '{provider_id}' is flagged (tier=high). "
+                "Flagged providers have a case narrative, not a clearance summary. "
+                "Use POST /provider/{provider_id}/explain instead."
+            ),
+        )
+
+    enriched = assemble(p)
+    from src.narrator import _load_cache
+    cache = _load_cache()
+    cache_key = f"clearance_{provider_id}"
+    was_cached = cache_key in cache
+
+    narrative = narrate_clearance(enriched)
+    if narrative is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "All Groq API keys are currently rate-limited. "
+                "The evidence record is available but prose narration is unavailable. "
+                "Retry in a few minutes."
+            ),
+        )
+
+    return NarrativeResponse(
+        narrative=narrative,
+        evidence=[e.model_dump() for e in enriched.evidence],
+        cached=was_cached,
     )
 
 
@@ -701,16 +808,71 @@ def get_stats():
     )
 
 
-@app.get("/provider/{provider_id}/explain", summary="LLM explanation (not yet implemented)")
-def explain_provider(provider_id: str):
-    """Returns 501 — the LLM narrator is not yet implemented.
-
-    The frontend wires the Explain button to this endpoint now; the narrative
-    implementation drops in here later without requiring a frontend change.
-    """
+@app.get("/provider/{provider_id}/explain", summary="LLM explanation — use POST instead")
+def explain_provider_get(provider_id: str):
+    """Redirect hint: the narrator uses POST /provider/{id}/explain."""
     if provider_id not in _PROVIDERS:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
     raise HTTPException(
-        status_code=501,
-        detail="LLM narrator not yet implemented. Check back after the narrative integration.",
+        status_code=405,
+        detail="Use POST /provider/{provider_id}/explain to generate an investigation narrative.",
     )
+
+
+# ── Chat assistant endpoint ───────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    message: str
+    provider_ids: list[str] = []
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
+_CHAT_SYSTEM = (
+    "You are a Medicare fraud investigation assistant helping reviewers understand provider cases.\n"
+    "Use short sentences and plain, everyday English — the reviewers are not medical experts.\n\n"
+    "If provider evidence is given in the context, base your answer on that evidence only.\n"
+    "If no provider context is given, answer general questions about Medicare fraud investigation.\n\n"
+    "Rules:\n"
+    "- Never state a provider committed fraud — describe what the records show.\n"
+    "- Never mention a score, probability, or risk tier number.\n"
+    "- If a policy citation appears in the evidence, mention it by its citation string.\n"
+    "- Do not invent findings that are not in the evidence.\n"
+    "- Keep your reply under 200 words."
+)
+
+
+@app.post("/chat", response_model=ChatResponse, summary="Chat assistant with optional provider context")
+def chat_assistant(body: ChatRequest):
+    """General-purpose chat assistant.
+
+    Pass provider_ids to include their evidence as context (extracted from @mentions in the UI).
+    Returns 503 if all Groq keys are rate-limited.
+    """
+    from src.narrator import _call_groq, _MODEL_MEDIUM
+
+    # Build evidence context for each mentioned provider (cap at 3)
+    context_blocks: list[str] = []
+    for pid in body.provider_ids[:3]:
+        p = _PROVIDERS.get(pid.upper())
+        if not p:
+            continue
+        enriched = assemble(p)
+        lines = [f"  [{e.type.upper()}] {e.summary}" for e in enriched.evidence]
+        block = f"Provider {pid} ({p.risk_tier} risk tier, {p.n_claims} claims):\n" + "\n".join(lines)
+        context_blocks.append(block)
+
+    if context_blocks:
+        user_prompt = "Provider context:\n\n" + "\n\n".join(context_blocks) + f"\n\nQuestion: {body.message}"
+    else:
+        user_prompt = body.message
+
+    result = _call_groq(_CHAT_SYSTEM, user_prompt, _MODEL_MEDIUM)
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM service temporarily unavailable. Try again in a moment.",
+        )
+    return ChatResponse(reply=result)
