@@ -3,11 +3,14 @@ import {
   Outlet,
   Link,
   createRootRouteWithContext,
+  redirect,
   useRouter,
+  useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { isAuthenticated } from "../lib/auth";
 import { CaseStoreProvider } from "../lib/caseStore";
 import { AppSidebar } from "../components/AppSidebar";
 import { Toaster } from "../components/ui/sonner";
@@ -76,10 +79,28 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
+  beforeLoad: ({ location }) => {
+    if (location.pathname !== "/login" && !isAuthenticated()) {
+      throw redirect({ to: "/login" });
+    }
+    if (location.pathname === "/login" && isAuthenticated()) {
+      throw redirect({ to: "/" });
+    }
+  },
 });
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  if (pathname === "/login") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

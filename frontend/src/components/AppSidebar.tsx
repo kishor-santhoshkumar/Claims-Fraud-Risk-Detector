@@ -1,6 +1,7 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { BarChart3, ListChecks, MessageSquare, Settings, SlidersHorizontal } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { BarChart3, ListChecks, LogOut, MessageSquare, Settings, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { logout } from "@/lib/auth";
 
 const items = [
   { to: "/", label: "Queue", icon: ListChecks },
@@ -12,6 +13,12 @@ const items = [
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate({ to: "/login" });
+  };
 
   return (
     <nav className="flex h-screen w-14 shrink-0 flex-col border-r border-border bg-background md:w-[200px]">
@@ -37,8 +44,17 @@ export function AppSidebar() {
           );
         })}
       </div>
-      <div className="mt-auto hidden px-4 py-3 text-[11px] text-muted-foreground md:block">
-        Model v1.0 · 31 features
+      <div className="mt-auto p-2">
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <LogOut className="size-4 shrink-0" strokeWidth={1.75} />
+          <span className="hidden md:inline">Sign out</span>
+        </button>
+        <div className="mt-2 hidden px-2 py-1 text-[11px] text-muted-foreground md:block">
+          Model v1.0 · 31 features
+        </div>
       </div>
     </nav>
   );
