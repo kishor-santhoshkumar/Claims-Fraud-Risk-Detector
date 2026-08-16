@@ -1,7 +1,8 @@
 /**
  * Typed fetch functions for the Claims Fraud Risk Detector backend.
  *
- * All requests go through /api which Vite proxies to http://localhost:8000.
+ * Local dev: requests go through /api, which Vite proxies to http://localhost:8001.
+ * Production: set VITE_API_URL at build time to the backend's public URL + /api.
  *
  * USE_MOCK = true → every function returns mock data (demo safety switch).
  * Flip this to false to hit the real backend.
@@ -13,7 +14,10 @@ import {
 
 const USE_MOCK = false;
 
-const BASE = "/api";
+// VITE_API_URL is baked in at build time.
+// Local dev: undefined → "/api" (Vite proxy rewrites to http://localhost:8001).
+// Railway two-service: set to "https://your-backend.up.railway.app/api".
+const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
 // ── Types matching src/schema.py exactly ────────────────────────────────────
 
@@ -160,7 +164,7 @@ export interface NarrativeResponse {
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });

@@ -1,0 +1,1 @@
+- [Claims Fraud Risk Detector — project context](project_claims_fraud.md) — hackathon healthcare provider fraud detection; two-stage RF+XGB cascade; encoding traps; known cross-entity CV leak
