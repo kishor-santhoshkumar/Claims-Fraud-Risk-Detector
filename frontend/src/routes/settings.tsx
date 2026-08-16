@@ -31,7 +31,7 @@ function Settings() {
         <Row label="Review threshold" value="0.55" />
         <Row label="Scoring run" value="14 Aug 2026" />
         <Row label="Deterministic rules" value="12" />
-        <Row label="Data source" value="mockData.ts" />
+        <Row label="Data source" value="Kaggle — Medicare Provider Fraud Detection" />
       </div>
 
       <div className="mt-8">
