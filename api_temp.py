@@ -1023,6 +1023,59 @@ def get_stats():
     )
 
 
+@app.get("/fingerprint", summary="Normalised feature profiles by risk tier for the radar chart")
+def get_fingerprint():
+    """Returns per-tier averages (0–1 normalised) for 6 key signal features.
+
+    Used by the analytics Signal Fingerprint radar chart.
+    Values are normalised against the full population min/max so that 1.0 means
+    the highest observed value across all 5,410 providers.
+    """
+    # SHAP feature name → radar axis label
+    FEAT_MAP: dict[str, str] = {
+        "mean_bene_n_providers": "bene_shared",
+        "mean_reimbursed":       "mean_claim",
+        "mean_n_diag":           "unique_diag",
+        "mean_admission_length": "avg_length",
+        "mean_deductible":       "deductible",
+        "n_inpatient_claims":    "inpatient_share",
+    }
+
+    all_vals: dict[str, list[float]] = {label: [] for label in FEAT_MAP.values()}
+    tier_vals: dict[str, dict[str, list[float]]] = {
+        t: {label: [] for label in FEAT_MAP.values()}
+        for t in ("high", "medium", "low")
+    }
+
+    for p in _PROVIDERS.values():
+        feat_lookup: dict[str, float] = {
+            e.feature: e.value  # type: ignore[union-attr]
+            for e in p.evidence
+            if e.type == "shap"  # type: ignore[union-attr]
+        }
+        for feat_name, label in FEAT_MAP.items():
+            if feat_name in feat_lookup:
+                v = float(feat_lookup[feat_name])
+                all_vals[label].append(v)
+                tier_vals[p.risk_tier][label].append(v)
+
+    pop_min = {k: min(v) if v else 0.0 for k, v in all_vals.items()}
+    pop_max = {k: max(v) if v else 1.0 for k, v in all_vals.items()}
+
+    def norm(val: float, label: str) -> float:
+        span = pop_max[label] - pop_min[label]
+        return round((val - pop_min[label]) / span, 3) if span > 0 else 0.5
+
+    result: dict[str, dict[str, float | None]] = {}
+    for tier in ("high", "medium", "low"):
+        result[tier] = {}
+        for label in FEAT_MAP.values():
+            vals = tier_vals[tier][label]
+            result[tier][label] = norm(sum(vals) / len(vals), label) if vals else None
+
+    return result
+
+
 @app.get("/provider/{provider_id}/explain", summary="LLM explanation — use POST instead")
 def explain_provider_get(provider_id: str):
     """Redirect hint: the narrator uses POST /provider/{id}/explain."""

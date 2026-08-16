@@ -310,6 +310,25 @@ export async function fetchClearance(
   }
 }
 
+export interface FingerprintTier {
+  bene_shared: number | null;
+  mean_claim: number | null;
+  unique_diag: number | null;
+  avg_length: number | null;
+  deductible: number | null;
+  inpatient_share: number | null;
+}
+
+export interface FingerprintResponse {
+  high: FingerprintTier;
+  medium: FingerprintTier;
+  low: FingerprintTier;
+}
+
+export async function fetchFingerprint(): Promise<FingerprintResponse> {
+  return apiFetch<FingerprintResponse>("/fingerprint");
+}
+
 /** POST /chat — general assistant with optional provider evidence context. */
 export async function chatWithAssistant(
   message: string,
