@@ -143,12 +143,21 @@ function LoginPage() {
             </button>
           </form>
 
-          {/* Footer inside card */}
+          {/* Quote */}
           <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid rgba(30,41,59,0.08)", textAlign: "center" }}>
-            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8791a8", margin: 0 }}>
-              Model v1.0 · 31 features · 5,410 providers
+            <div style={{ width: 28, height: 1, background: "rgba(71,81,107,0.25)", margin: "0 auto 14px" }} />
+            <p style={{ fontStyle: "italic", fontSize: 13, lineHeight: 1.65, color: "#47516b", opacity: 0.88, margin: "0 0 10px" }}>
+              "A flagged claim is not an accusation — it is a question the data is asking an investigator to answer"
+            </p>
+            <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8791a8", margin: 0 }}>
+              — Claims Investigation Notes
             </p>
           </div>
+
+          {/* Model info */}
+          <p style={{ marginTop: 20, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8791a8", textAlign: "center", margin: "16px 0 0" }}>
+            Model v1.0 · 31 features · 5,410 providers
+          </p>
         </div>
       </div>
 
