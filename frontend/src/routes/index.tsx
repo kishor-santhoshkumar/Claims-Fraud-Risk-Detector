@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { useCaseStore, type CaseStatus } from "@/lib/caseStore";
 import { type CaseProvider } from "@/lib/caseStore";
 import { formatMoneyShort } from "@/lib/mockData";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   component: Queue,
@@ -14,15 +13,13 @@ type Tab = "all" | "unreviewed" | "confirmed" | "cleared";
 
 function TierBadge({ tier }: { tier: CaseProvider["risk_tier"] }) {
   const label = tier === "high" ? "High" : tier === "medium" ? "Medium" : "Low";
+  const styles: Record<string, React.CSSProperties> = {
+    high:   { background: "rgba(239,68,68,0.12)",  border: "1px solid rgba(239,68,68,0.3)",  color: "#dc2626" },
+    medium: { background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "#b45309" },
+    low:    { background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#059669" },
+  };
   return (
-    <span
-      className={cn(
-        "inline-flex w-[62px] justify-center border px-1.5 py-0.5 text-[11px]",
-        tier === "high" && "border-risk/40 text-risk",
-        tier === "medium" && "border-border text-foreground",
-        tier === "low" && "border-cleared/40 text-cleared",
-      )}
-    >
+    <span style={{ display: "inline-flex", width: 62, justifyContent: "center", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 600, ...styles[tier] }}>
       {label}
     </span>
   );
@@ -111,7 +108,7 @@ function Queue() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <p className="text-[14px] text-muted-foreground">Loading queue from backend…</p>
+        <p className="text-[14px]" style={{ color: "#667088" }}>Loading queue from backend…</p>
       </div>
     );
   }
@@ -120,7 +117,7 @@ function Queue() {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3">
         <p className="text-[14px] text-risk">Failed to load queue: {error}</p>
-        <p className="text-[12px] text-muted-foreground">
+        <p className="text-[12px]" style={{ color: "#667088" }}>
           Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code>
         </p>
       </div>
@@ -128,10 +125,11 @@ function Queue() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="border-b border-border px-6 py-4">
+    <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
+      {/* Glass header */}
+      <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-[15px] font-medium">
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e" }}>
             {queue.length} cases · {counts.reviewed} reviewed · {formatMoneyShort(counts.atRisk)} at risk
           </h1>
           <form onSubmit={submitSearch}>
@@ -139,79 +137,89 @@ function Queue() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Go to provider ID"
-              className="w-56 border border-border bg-background px-2.5 py-1.5 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/40"
+              style={{ width: 224, height: 36, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 8, padding: "0 10px", fontSize: 13, fontFamily: "inherit", color: "#161b2e", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
+              onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.12)"; }}
+              onBlur={(e) => { e.target.style.borderColor = "rgba(100,116,139,0.22)"; e.target.style.boxShadow = "none"; }}
             />
           </form>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {(["all", "unreviewed", "confirmed", "cleared"] as Tab[]).map((t) => (
               <button
                 key={t}
-                onClick={() => {
-                  setTab(t);
-                  setSelected(0);
+                onClick={() => { setTab(t); setSelected(0); }}
+                style={{
+                  height: 30, padding: "0 13px", borderRadius: 999,
+                  border: tab === t ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(100,116,139,0.22)",
+                  background: tab === t ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.5)",
+                  color: tab === t ? "#1d4ed8" : "#667088",
+                  fontSize: 12, fontWeight: 500, fontFamily: "inherit", cursor: "pointer",
+                  transition: "background 0.15s, color 0.15s, border-color 0.15s",
+                  textTransform: "capitalize",
                 }}
-                className={cn(
-                  "border px-2.5 py-1 text-[12px] capitalize",
-                  tab === t
-                    ? "border-foreground/30 bg-muted text-foreground"
-                    : "border-transparent text-muted-foreground hover:bg-muted",
-                )}
               >
                 {t === "all" ? "All" : t}
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p style={{ fontSize: 11, color: "#8791a8" }}>
             J / K move · Enter opens · F confirms · C clears
           </p>
         </div>
       </header>
 
-      <div ref={rowsRef} className="flex-1 overflow-y-auto">
+      {/* Provider list inside glass card */}
+      <div ref={rowsRef} style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
         {allReviewed ? (
-          <div className="mx-auto max-w-md px-6 py-24 text-center">
-            <p className="text-[15px]">
+          <div style={{ maxWidth: 480, margin: "96px auto 0", textAlign: "center" }} className="glass-panel">
+            <p style={{ fontSize: 15, color: "#232a41", marginBottom: 16 }}>
               All {queue.length} cases reviewed. {counts.confirmed} confirmed, {counts.cleared} cleared.
             </p>
             <button
               onClick={reset}
-              className="mt-4 border border-border px-3 py-1.5 text-[13px] hover:bg-muted"
+              style={{ height: 36, padding: "0 16px", borderRadius: 8, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.6)", color: "#47516b", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}
             >
               Reset queue
             </button>
           </div>
         ) : visible.length === 0 ? (
-          <div className="mx-auto max-w-md px-6 py-24 text-center text-[14px] text-muted-foreground">
+          <div style={{ maxWidth: 480, margin: "96px auto 0", textAlign: "center", fontSize: 14, color: "#667088" }}>
             Switch to All to pick up the next case in the queue.
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="glass-card" style={{ overflow: "hidden" }}>
             {visible.map((p, i) => {
               const reviewed = p.status !== "unreviewed";
               return (
                 <div
                   key={p.provider_id}
                   data-idx={i}
-                  onClick={() => {
-                    setSelected(i);
-                    openProvider(p);
+                  onClick={() => { setSelected(i); openProvider(p); }}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "44px 110px 74px 1fr 120px 110px",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    borderBottom: "1px solid rgba(30,41,59,0.06)",
+                    background: selected === i ? "rgba(59,130,246,0.08)" : "transparent",
+                    color: reviewed ? "#8791a8" : "#232a41",
+                    transition: "background 0.1s",
                   }}
-                  className={cn(
-                    "grid cursor-pointer grid-cols-[44px_110px_74px_1fr_120px_110px] items-center gap-3 px-6 py-2.5 text-[13px] hover:bg-muted/60",
-                    selected === i && "bg-muted",
-                    reviewed && "text-muted-foreground",
-                  )}
+                  onMouseEnter={(e) => { if (selected !== i) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.4)"; }}
+                  onMouseLeave={(e) => { if (selected !== i) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
                 >
-                  <span className="font-mono text-[12px] text-muted-foreground">{i + 1}</span>
-                  <span className="font-mono">{p.provider_id}</span>
+                  <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 12, color: "#8791a8" }}>{i + 1}</span>
+                  <span style={{ fontFamily: "ui-monospace,monospace" }}>{p.provider_id}</span>
                   <TierBadge tier={p.risk_tier} />
-                  <span className="truncate text-muted-foreground">{p.state ?? "—"}</span>
-                  <span className="text-right font-mono tabular-nums">
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#8791a8" }}>{p.state ?? "—"}</span>
+                  <span style={{ textAlign: "right", fontFamily: "ui-monospace,monospace", fontVariantNumeric: "tabular-nums" }}>
                     {formatMoneyShort(p.expected_loss)}
                   </span>
-                  <span className="text-right text-muted-foreground tabular-nums">
+                  <span style={{ textAlign: "right", color: "#8791a8", fontVariantNumeric: "tabular-nums" }}>
                     {p.n_claims.toLocaleString()} claims
                   </span>
                 </div>

@@ -154,3 +154,193 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* ── Glassmorphism design system ─────────────────────────────────────────── */
+
+:root {
+  --glass-bg: linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 55%, rgba(252,235,246,0.46) 100%);
+  --glass-bg-strong: linear-gradient(160deg, rgba(255,255,255,0.88) 0%, rgba(232,234,253,0.72) 100%);
+  --glass-bg-soft: linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(230,233,253,0.36) 100%);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-border-soft: rgba(100, 116, 139, 0.22);
+  --hairline: rgba(30, 41, 59, 0.08);
+  --shadow-glass: 0 10px 30px rgba(76,81,219,0.12), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-glass-lg: 0 24px 60px rgba(76,81,219,0.18), 0 2px 8px rgba(15,23,42,0.05);
+  --page-gradient:
+    radial-gradient(circle at 10% 6%, rgba(99,102,241,0.22) 0%, transparent 42%),
+    radial-gradient(circle at 90% 10%, rgba(56,189,248,0.20) 0%, transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(236,72,153,0.16) 0%, transparent 48%),
+    radial-gradient(circle at 8% 92%, rgba(16,185,129,0.16) 0%, transparent 45%),
+    linear-gradient(160deg, #f5f7ff 0%, #eef1fd 45%, #fdf2f8 100%);
+  --text-primary: #161b2e;
+  --text-muted-g: #667088;
+}
+
+/* Override Tailwind's white body background with the page gradient */
+body {
+  background: var(--page-gradient);
+  background-attachment: fixed;
+}
+
+/* ── Glass utility classes ────────────────────────────────────────────────── */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-glass);
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-glass);
+}
+
+/* ── Ambient animated blobs ───────────────────────────────────────────────── */
+.ambient-bg {
+  position: absolute; inset: 0;
+  overflow: hidden; pointer-events: none; z-index: 0;
+}
+.ambient-blob {
+  position: absolute; border-radius: 50%;
+  filter: blur(90px); mix-blend-mode: multiply;
+}
+.ambient-blob--a {
+  width: 560px; height: 560px; top: -140px; left: -110px;
+  background: #3b82f6; opacity: 0.32;
+  animation: ambientDriftA 20s ease-in-out infinite alternate;
+}
+.ambient-blob--b {
+  width: 500px; height: 500px; bottom: -150px; right: -90px;
+  background: #6366f1; opacity: 0.28;
+  animation: ambientDriftB 24s ease-in-out infinite alternate;
+}
+.ambient-blob--c {
+  width: 400px; height: 400px; bottom: 8%; left: 6%;
+  background: #ec4899; opacity: 0.22;
+  animation: ambientDriftC 17s ease-in-out infinite alternate;
+}
+/* Subtle variant for use behind real content */
+.ambient-bg--subtle .ambient-blob--a { opacity: 0.10; }
+.ambient-bg--subtle .ambient-blob--b { opacity: 0.09; }
+.ambient-bg--subtle .ambient-blob--c { opacity: 0.07; }
+
+@keyframes ambientDriftA {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(60px,40px) scale(1.08); }
+}
+@keyframes ambientDriftB {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(-50px,-30px) scale(1.06); }
+}
+@keyframes ambientDriftC {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(30px,-35px) scale(1.1); }
+}
+
+/* ── Login animations ─────────────────────────────────────────────────────── */
+@keyframes cardEntrance {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes cardShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+@keyframes spinLoader { to { transform: rotate(360deg); } }
+
+/* ── Simulation loading overlay ───────────────────────────────────────────── */
+.sim-overlay-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(13px);
+  -webkit-backdrop-filter: blur(13px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  opacity: 1; transition: opacity 0.4s ease;
+}
+.sim-overlay-backdrop.is-closing { opacity: 0; }
+
+.sim-overlay-content {
+  --sim-gold: #eab308;
+  width: min(640px, 92vw);
+  color: #f1f5f9;
+}
+.sim-overlay-label {
+  text-align: center; font-size: 14px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--sim-gold); margin-bottom: 8px;
+  text-shadow: 0 1px 3px rgba(15,23,42,0.8), 0 2px 16px rgba(15,23,42,0.5);
+}
+.sim-overlay-counter {
+  text-align: center; font-size: 28px; font-weight: 700;
+  color: #f8fafc; margin: 0 0 12px;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+  text-shadow: 0 1px 3px rgba(15,23,42,0.8), 0 2px 18px rgba(15,23,42,0.5);
+}
+.sim-overlay-stage-area {
+  position: relative; width: 100%; height: 380px; overflow: hidden;
+}
+.sim-overlay-track {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 760px;
+  transition: transform 0.7s cubic-bezier(0.65,0,0.35,1);
+  transform: translateY(0);
+}
+.sim-overlay-track.is-shifted { transform: translateY(-380px); }
+.sim-overlay-dot2 {
+  position: absolute; top: 0; left: 0;
+  width: 10px; height: 10px; border-radius: 50%;
+  transition-property: transform, opacity, background-color;
+  transition-timing-function: cubic-bezier(0.4,0,0.2,1), ease, ease;
+  transition-duration: 0.65s;
+  box-shadow: 0 0 0 1px rgba(15,23,42,0.25), 0 1px 3px rgba(15,23,42,0.35);
+}
+.sim-overlay-dot2.is-pulsing { animation: dotPulseGlow 1.5s ease-in-out infinite; }
+@keyframes dotPulseGlow {
+  0%, 100% { filter: brightness(0.85); box-shadow: 0 0 0 rgba(96,165,250,0); }
+  50%       { filter: brightness(1.25); box-shadow: 0 0 9px rgba(96,165,250,0.65); }
+}
+.sim-overlay-dot2.is-settling { animation: dotSettleGlow 0.5s ease; }
+@keyframes dotSettleGlow {
+  0%   { filter: brightness(1.9); box-shadow: 0 0 14px currentColor; }
+  100% { filter: brightness(1);   box-shadow: 0 0 0 rgba(0,0,0,0); }
+}
+.sim-overlay-funnel {
+  position: absolute; left: 50%; transform: translateX(-50%); width: 320px;
+}
+.sim-overlay-funnel-svg {
+  width: 100%; height: auto; display: block;
+  filter: drop-shadow(0 4px 14px rgba(15,23,42,0.25));
+}
+.sim-overlay-funnel--rf polygon {
+  fill: rgba(96,165,250,0.22); stroke: rgba(59,130,246,0.75); stroke-width: 1.75;
+}
+.sim-overlay-funnel--xgb polygon {
+  fill: rgba(234,179,8,0.22); stroke: rgba(202,138,4,0.75); stroke-width: 1.75;
+}
+.sim-overlay-funnel-label {
+  position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--sim-gold); white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(15,23,42,0.8), 0 2px 10px rgba(15,23,42,0.45);
+}
+
+@media (max-width: 640px) {
+  .sim-overlay-stage-area { transform: scale(0.72); transform-origin: top center; height: 274px; }
+  .sim-overlay-counter { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-blob { animation: none; }
+  .sim-overlay-dot2 { transition: none !important; animation: none !important; }
+  .sim-overlay-track { transition: none !important; }
+  .sim-overlay-backdrop { transition: none; }
+}

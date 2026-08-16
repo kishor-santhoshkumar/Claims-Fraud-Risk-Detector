@@ -1,6 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, ListChecks, LogOut, MessageSquare, Settings, SlidersHorizontal } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { BarChart3, ListChecks, LogOut, MessageSquare, Settings, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { logout } from "@/lib/auth";
 
 const items = [
@@ -10,6 +9,22 @@ const items = [
   { to: "/simulation", label: "Simulation", icon: SlidersHorizontal },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
+
+const SIDEBAR_STYLE: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
+  flexShrink: 0,
+  height: "100svh",
+  display: "flex",
+  flexDirection: "column",
+  background: "linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(230,233,253,0.36) 100%)",
+  backdropFilter: "blur(24px) saturate(180%)",
+  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  borderRight: "1px solid rgba(255,255,255,0.7)",
+  boxShadow: "4px 0 24px rgba(76,81,219,0.06)",
+  padding: "18px 14px",
+  transition: "width 0.2s ease",
+};
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -21,40 +36,71 @@ export function AppSidebar() {
   };
 
   return (
-    <nav className="flex h-screen w-14 shrink-0 flex-col border-r border-border bg-background md:w-[200px]">
-      <div className="flex h-12 items-center border-b border-border px-3 md:px-4">
-        <span className="hidden text-[13px] font-medium tracking-tight md:inline">Payment integrity</span>
-        <span className="text-[13px] font-medium md:hidden">PI</span>
+    <nav className="w-14 md:w-[200px]" style={SIDEBAR_STYLE}>
+      {/* Brand */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 32, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid rgba(30,41,59,0.08)" }}>
+        <div style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 4px 14px rgba(59,130,246,0.35)" }}>
+          <ShieldCheck size={15} color="#fff" strokeWidth={2} />
+        </div>
+        <span className="hidden md:inline" style={{ fontSize: 12.5, fontWeight: 600, color: "#161b2e", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          Payment Integrity
+        </span>
       </div>
-      <div className="flex flex-col gap-px p-2">
+
+      {/* Nav */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
         {items.map(({ to, label, icon: Icon }) => {
           const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
           return (
             <Link
               key={to}
               to={to}
-              className={cn(
-                "flex items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted",
-                active && "bg-muted font-medium text-foreground",
-              )}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                height: 44,
+                padding: "0 12px",
+                borderRadius: 10,
+                textDecoration: "none",
+                fontSize: 13.5,
+                fontWeight: 500,
+                borderLeft: active ? "3px solid #3b82f6" : "3px solid transparent",
+                background: active ? "rgba(59,130,246,0.14)" : "transparent",
+                color: active ? "#1d4ed8" : "#667088",
+                transition: "background 0.15s, color 0.15s, border-color 0.15s",
+              }}
+              onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.55)"; (e.currentTarget as HTMLAnchorElement).style.color = "#161b2e"; } }}
+              onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = "#667088"; } }}
             >
-              <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+              <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? "#2563eb" : undefined }} />
               <span className="hidden md:inline">{label}</span>
             </Link>
           );
         })}
       </div>
-      <div className="mt-auto p-2">
+
+      {/* Bottom */}
+      <div style={{ marginTop: "auto", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+        {/* User card */}
+        <div className="hidden md:flex" style={{ alignItems: "center", gap: 10, background: "rgba(255,255,255,0.5)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 12, padding: "8px 10px" }}>
+          <div style={{ width: 30, height: 30, flexShrink: 0, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#f8fafc", background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
+            CC
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#161b2e", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>CodeCrafters</span>
+            <span style={{ fontSize: 11, color: "#8791a8" }}>v1.0 · 31 features</span>
+          </div>
+        </div>
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          style={{ display: "flex", alignItems: "center", gap: 10, height: 38, padding: "0 12px", borderRadius: 10, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.5)", color: "#667088", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, color 0.15s, border-color 0.15s", width: "100%", justifyContent: "center" }}
+          onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(239,68,68,0.1)"; b.style.borderColor = "rgba(239,68,68,0.3)"; b.style.color = "#dc2626"; }}
+          onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.5)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "#667088"; }}
         >
-          <LogOut className="size-4 shrink-0" strokeWidth={1.75} />
+          <LogOut size={16} strokeWidth={1.75} style={{ flexShrink: 0 }} />
           <span className="hidden md:inline">Sign out</span>
         </button>
-        <div className="mt-2 hidden px-2 py-1 text-[11px] text-muted-foreground md:block">
-          Model v1.0 · 31 features
-        </div>
       </div>
     </nav>
   );

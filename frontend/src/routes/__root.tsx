@@ -105,9 +105,14 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <CaseStoreProvider>
-        <div className="flex min-h-screen bg-background">
+        <div style={{ position: "relative", display: "flex", minHeight: "100svh", overflow: "hidden" }}>
+          <div className="ambient-bg ambient-bg--subtle" aria-hidden="true">
+            <div className="ambient-blob ambient-blob--a" />
+            <div className="ambient-blob ambient-blob--b" />
+            <div className="ambient-blob ambient-blob--c" />
+          </div>
           <AppSidebar />
-          <main className="min-w-0 flex-1">
+          <main style={{ position: "relative", zIndex: 2, flex: 1, minWidth: 0, height: "100svh", overflowY: "auto" }}>
             <Outlet />
           </main>
         </div>

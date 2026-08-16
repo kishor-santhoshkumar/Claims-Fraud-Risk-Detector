@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCaseStore } from "@/lib/caseStore";
 import { chatWithAssistant } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assistant")({
   component: Assistant,
@@ -81,36 +80,31 @@ function Assistant() {
   };
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="border-b border-border px-6 py-4">
-        <h1 className="text-[15px] font-medium">Case assistant</h1>
-        <p className="mt-1 text-[11px] text-muted-foreground">
+    <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
+      <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e", margin: 0 }}>Case assistant</h1>
+        <p style={{ marginTop: 4, fontSize: 11, color: "#667088", marginBottom: 0 }}>
           Ask general questions or tag a provider with @PRVXXXXX to get evidence-grounded answers
         </p>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
           {messages.map((m) => (
-            <div key={m.id} className={cn("text-[14px]", m.role === "user" && "flex justify-end")}>
+            <div key={m.id} style={{ fontSize: 14, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
               {m.role === "user" ? (
-                <span className="max-w-[80%] whitespace-pre-wrap border border-border bg-muted px-3 py-2 text-foreground">
+                <span style={{ maxWidth: "80%", whiteSpace: "pre-wrap", background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "#fff", padding: "8px 14px", borderRadius: "14px 14px 4px 14px", fontSize: 13 }}>
                   {m.text}
                 </span>
               ) : (
-                <p
-                  className={cn(
-                    "whitespace-pre-wrap leading-relaxed",
-                    m.error ? "text-muted-foreground italic" : "text-foreground",
-                  )}
-                >
+                <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.65, margin: 0, color: m.error ? "#8791a8" : "#232a41", fontStyle: m.error ? "italic" : "normal" }}>
                   {m.text}
                 </p>
               )}
             </div>
           ))}
           {pending && (
-            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#8791a8" }}>
               <span className="animate-pulse">●</span>
               <span>Thinking…</span>
             </div>
@@ -119,10 +113,10 @@ function Assistant() {
         </div>
       </div>
 
-      <form onSubmit={send} className="border-t border-border px-6 py-4">
-        <div className="mx-auto max-w-2xl">
+      <form onSubmit={send} style={{ padding: "12px 24px 16px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderTop: "1px solid rgba(255,255,255,0.75)" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto" }}>
           {suggestions.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1">
+            <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
               {suggestions.map((p) => (
                 <button
                   key={p.provider_id}
@@ -131,26 +125,28 @@ function Assistant() {
                     setInput((v) => v.replace(/@([A-Za-z0-9]*)$/, `@${p.provider_id} `));
                     inputRef.current?.focus();
                   }}
-                  className="border border-border px-2 py-1 font-mono text-[12px] hover:bg-muted"
+                  style={{ padding: "2px 8px", fontFamily: "ui-monospace,monospace", fontSize: 12, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 6, color: "#232a41", cursor: "pointer" }}
                 >
                   {p.provider_id}
-                  <span className="ml-1.5 text-muted-foreground">{p.risk_tier}</span>
+                  <span style={{ marginLeft: 6, color: "#8791a8" }}>{p.risk_tier}</span>
                 </button>
               ))}
             </div>
           )}
-          <div className="flex gap-2">
+          <div style={{ display: "flex", gap: 8 }}>
             <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder='Ask anything, or "@PRV52985 why was this flagged?"'
-              className="flex-1 border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/40"
+              style={{ flex: 1, height: 40, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 10, padding: "0 12px", fontSize: 13, fontFamily: "inherit", color: "#161b2e", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
+              onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.12)"; }}
+              onBlur={(e) => { e.target.style.borderColor = "rgba(100,116,139,0.22)"; e.target.style.boxShadow = "none"; }}
             />
             <button
               type="submit"
               disabled={pending || !input.trim()}
-              className="border border-border px-3 py-2 text-[13px] hover:bg-muted disabled:opacity-40"
+              style={{ height: 40, padding: "0 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", opacity: (pending || !input.trim()) ? 0.4 : 1, transition: "opacity 0.15s" }}
             >
               Send
             </button>

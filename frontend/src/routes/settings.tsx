@@ -8,9 +8,9 @@ export const Route = createFileRoute("/settings")({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[220px_1fr] gap-4 py-2.5 text-[13px]">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono">{value}</span>
+    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16, padding: "11px 0", fontSize: 13, borderBottom: "1px solid rgba(30,41,59,0.08)" }}>
+      <span style={{ color: "#667088" }}>{label}</span>
+      <span style={{ fontFamily: "ui-monospace, monospace", color: "#161b2e" }}>{value}</span>
     </div>
   );
 }
@@ -19,23 +19,36 @@ function Settings() {
   const { counts, reset } = useCaseStore();
 
   return (
-    <div className="max-w-2xl px-6 pb-16">
-      <header className="border-b border-border py-4">
-        <h1 className="text-[15px] font-medium">Settings</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">Model configuration and session state.</p>
+    <div style={{ maxWidth: 640, padding: "0 24px 64px" }}>
+      <header style={{ paddingTop: 24, paddingBottom: 20, marginBottom: 8 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e", margin: 0 }}>Settings</h1>
+        <p style={{ marginTop: 4, fontSize: 13, color: "#667088", marginBottom: 0 }}>Model configuration and session state.</p>
       </header>
 
-      <div className="mt-6 divide-y divide-border border-y border-border">
-        <Row label="Model version" value="v1.0" />
-        <Row label="Features" value="31" />
-        <Row label="Review threshold" value="0.55" />
-        <Row label="Scoring run" value="14 Aug 2026" />
-        <Row label="Deterministic rules" value="12" />
-        <Row label="Data source" value="Kaggle — Medicare Provider Fraud Detection" />
+      {/* Model config glass card */}
+      <div className="glass-panel" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#667088", marginBottom: 4 }}>
+          Model Configuration
+        </h2>
+        <div>
+          <Row label="Model version" value="v1.0" />
+          <Row label="Features" value="31" />
+          <Row label="Review threshold" value="0.55" />
+          <Row label="Scoring run" value="14 Aug 2026" />
+          <Row label="Deterministic rules" value="12" />
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16, padding: "11px 0", fontSize: 13 }}>
+            <span style={{ color: "#667088" }}>Data source</span>
+            <span style={{ fontFamily: "ui-monospace, monospace", color: "#161b2e" }}>Kaggle — Medicare Provider Fraud Detection</span>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-8">
-        <p className="text-[13px] text-muted-foreground">
+      {/* Session state glass card */}
+      <div className="glass-panel">
+        <h2 style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#667088", marginBottom: 12 }}>
+          Session State
+        </h2>
+        <p style={{ fontSize: 13, color: "#47516b", marginBottom: 16 }}>
           {counts.reviewed} decisions recorded this session — {counts.confirmed} confirmed, {counts.cleared}{" "}
           cleared, {counts.needsInfo} awaiting information.
         </p>
@@ -44,7 +57,9 @@ function Settings() {
             reset();
             toast("Session decisions reset");
           }}
-          className="mt-3 border border-border px-3 py-1.5 text-[13px] hover:bg-muted"
+          style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.6)", color: "#47516b", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, color 0.15s" }}
+          onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(239,68,68,0.08)"; b.style.borderColor = "rgba(239,68,68,0.25)"; b.style.color = "#dc2626"; }}
+          onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.6)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "#47516b"; }}
         >
           Reset decisions
         </button>
