@@ -767,20 +767,28 @@ def get_provider_detail(provider_id: str):
     )
 
 
-def _generate_synthetic_claims(provider_id: str, n_claims: int, total_reimbursed: float) -> list[ClaimRow]:
-    """Deterministic synthetic claims when raw CSV files are not available in the container."""
+def _generate_synthetic_claims(
+    provider_id: str, n_claims: int, total_reimbursed: float, risk_tier: str = "low"
+) -> list[ClaimRow]:
+    """Deterministic synthetic claims when raw CSV files are not available in the container.
+
+    For HIGH/MEDIUM risk providers, injects realistic billing violations so that
+    _apply_claim_rules() has something to flag.
+    """
     rng = random.Random(hash(provider_id) & 0xFFFF_FFFF)
     n_claims = max(1, n_claims)
 
-    # ~20 % inpatient, ~80 % outpatient — typical for Medicare billing
     n_inpatient = max(1, round(n_claims * 0.20))
-    n_outpatient = n_claims - n_inpatient
-
-    # Medicare data covers Jan 2009 – Dec 2010
     epoch = date(2009, 1, 1)
     date_range = 730
 
-    # Generate raw lognormal amounts then rescale to match total_reimbursed exactly
+    # How many inpatient claims to make SHORT_STAY_HIGH_COST violations
+    n_sshc = round(n_inpatient * (0.15 if risk_tier == "high" else 0.05 if risk_tier == "medium" else 0))
+    # How many SAME_DAY_REPEAT clusters (each = 5 claims, same bene + date)
+    n_sdr_clusters = 2 if risk_tier == "high" else 1 if risk_tier == "medium" else 0
+    # How many DUPLICATE_CLAIM pairs to inject
+    n_dupes = round(n_claims * 0.04) if risk_tier == "high" else 0
+
     mu = math.log(max(total_reimbursed / n_claims, 1))
     raw = [rng.lognormvariate(mu, 0.6) for _ in range(n_claims)]
     scale = total_reimbursed / sum(raw) if sum(raw) else 1.0
@@ -789,10 +797,19 @@ def _generate_synthetic_claims(provider_id: str, n_claims: int, total_reimbursed
     for i in range(n_claims):
         is_ip = i < n_inpatient
         claim_type = "inpatient" if is_ip else "outpatient"
-        start = epoch + timedelta(days=rng.randint(0, date_range))
-        duration = rng.randint(3, 14) if is_ip else rng.randint(1, 3)
-        end = start + timedelta(days=duration)
-        amount = round(raw[i] * scale, 2)
+
+        if is_ip and i < n_sshc:
+            # Intentional SHORT_STAY_HIGH_COST: 1-2 day stay, >$30k
+            duration = rng.randint(1, 2)
+            start = epoch + timedelta(days=rng.randint(0, date_range))
+            end = start + timedelta(days=duration)
+            amount = round(rng.uniform(30_500, 98_000), 2)
+        else:
+            start = epoch + timedelta(days=rng.randint(0, date_range))
+            duration = rng.randint(3, 14) if is_ip else rng.randint(1, 3)
+            end = start + timedelta(days=duration)
+            amount = round(raw[i] * scale, 2)
+
         n_diag = rng.randint(2, 6) if is_ip else rng.randint(1, 3)
         rows.append(ClaimRow(
             claim_id=f"{provider_id}-{i + 1:05d}",
@@ -803,14 +820,101 @@ def _generate_synthetic_claims(provider_id: str, n_claims: int, total_reimbursed
             amount_reimbursed=amount,
             deductible_paid=round(amount * rng.uniform(0.05, 0.20), 2),
             attending_physician=f"PHY{rng.randint(1000, 9999)}" if rng.random() > 0.25 else None,
-            diagnosis_codes=[f"{rng.randint(100,999)}.{rng.randint(0,9)}" for _ in range(n_diag)],
-            procedure_codes=[f"{rng.randint(10000,99999)}" for _ in range(rng.randint(0, 2))],
+            diagnosis_codes=[f"{rng.randint(100, 999)}.{rng.randint(0, 9)}" for _ in range(n_diag)],
+            procedure_codes=[f"{rng.randint(10000, 99999)}" for _ in range(rng.randint(0, 2))],
             admission_dt=start.isoformat() if is_ip else None,
             discharge_dt=end.isoformat() if is_ip else None,
             rule_flag=None,
         ))
 
+    # SAME_DAY_REPEAT clusters: 5 claims, same beneficiary, same date
+    for c in range(n_sdr_clusters):
+        cluster_dt = epoch + timedelta(days=rng.randint(0, date_range))
+        cluster_bene = f"BENE{rng.randint(10_000, 99_999)}"
+        for j in range(5):
+            amt = round(rng.uniform(80, 600), 2)
+            rows.append(ClaimRow(
+                claim_id=f"{provider_id}-SDR{c + 1}-{j + 1:02d}",
+                bene_id=cluster_bene,
+                claim_start_dt=cluster_dt.isoformat(),
+                claim_end_dt=cluster_dt.isoformat(),
+                claim_type="outpatient",
+                amount_reimbursed=amt,
+                deductible_paid=round(amt * 0.10, 2),
+                attending_physician=f"PHY{rng.randint(1000, 9999)}",
+                diagnosis_codes=[f"{rng.randint(100, 999)}.{rng.randint(0, 9)}"],
+                procedure_codes=[],
+                admission_dt=None,
+                discharge_dt=None,
+                rule_flag=None,
+            ))
+
+    # DUPLICATE_CLAIM: exact copy of an existing row with a different claim_id
+    for d in range(min(n_dupes, len(rows))):
+        src = rows[rng.randint(0, len(rows) - 1)]
+        rows.append(ClaimRow(
+            claim_id=f"{src.claim_id}-DUP",
+            bene_id=src.bene_id,
+            claim_start_dt=src.claim_start_dt,
+            claim_end_dt=src.claim_end_dt,
+            claim_type=src.claim_type,
+            amount_reimbursed=src.amount_reimbursed,
+            deductible_paid=src.deductible_paid,
+            attending_physician=src.attending_physician,
+            diagnosis_codes=src.diagnosis_codes,
+            procedure_codes=src.procedure_codes,
+            admission_dt=src.admission_dt,
+            discharge_dt=src.discharge_dt,
+            rule_flag=None,
+        ))
+
     return sorted(rows, key=lambda c: c.claim_start_dt)
+
+
+def _apply_claim_rules(rows: list[ClaimRow]) -> list[ClaimRow]:
+    """Evaluate claim-level rules from rules.yaml and set rule_flag on violating rows."""
+    from collections import defaultdict
+
+    # DUPLICATE_CLAIM: same beneficiary + start + end + amount
+    dupe_idx: dict = defaultdict(list)
+    for i, r in enumerate(rows):
+        dupe_idx[(r.bene_id, r.claim_start_dt, r.claim_end_dt, round(r.amount_reimbursed, 2))].append(i)
+    for indices in dupe_idx.values():
+        if len(indices) >= 2:
+            for i in indices:
+                if not rows[i].rule_flag:
+                    rows[i].rule_flag = "DUPLICATE_CLAIM"
+
+    # SAME_DAY_REPEAT: same beneficiary billed 5+ times on the same date
+    repeat_idx: dict = defaultdict(list)
+    for i, r in enumerate(rows):
+        repeat_idx[(r.bene_id, r.claim_start_dt)].append(i)
+    for indices in repeat_idx.values():
+        if len(indices) >= 5:
+            for i in indices:
+                if not rows[i].rule_flag:
+                    rows[i].rule_flag = "SAME_DAY_REPEAT"
+
+    # SHORT_STAY_HIGH_COST: inpatient, ≤2 day stay, reimbursed > $30,000
+    for r in rows:
+        if not r.rule_flag and r.claim_type == "inpatient" and r.amount_reimbursed > 30_000:
+            try:
+                stay = (date.fromisoformat(r.claim_end_dt) - date.fromisoformat(r.claim_start_dt)).days
+                if stay <= 2:
+                    r.rule_flag = "SHORT_STAY_HIGH_COST"
+            except (ValueError, TypeError):
+                pass
+
+    # DISCHARGE_BEFORE_ADMIT: end date precedes start date
+    for r in rows:
+        if not r.rule_flag:
+            try:
+                if r.claim_end_dt < r.claim_start_dt:
+                    r.rule_flag = "DISCHARGE_BEFORE_ADMIT"
+            except TypeError:
+                pass
+
+    return rows
 
 
 @app.get("/provider/{provider_id}/claims", response_model=ClaimsResponse, summary="Individual claims for a provider")
@@ -819,7 +923,7 @@ def get_provider_claims(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
 ):
-    """Paginated claim-level detail from the Kaggle CSVs. Returns 404 if provider unknown."""
+    """Paginated claim-level detail. Falls back to synthetic claims when CSV files are absent."""
     if provider_id not in _PROVIDERS:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
 
@@ -839,7 +943,10 @@ def get_provider_claims(
     # CSV files not present in container — generate synthetic claims from aggregate stats
     if not rows:
         p = _PROVIDERS[provider_id]
-        rows = _generate_synthetic_claims(provider_id, p.n_claims, p.total_reimbursed)
+        rows = _generate_synthetic_claims(provider_id, p.n_claims, p.total_reimbursed, p.risk_tier)
+
+    # Evaluate claim-level rules and flag violations
+    rows = _apply_claim_rules(rows)
 
     rows.sort(key=lambda c: c.claim_start_dt)
     total = len(rows)
