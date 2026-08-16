@@ -127,10 +127,11 @@ function Queue() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
       {/* Glass header */}
-      <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e" }}>
-            {queue.length} cases · {counts.reviewed} reviewed · {formatMoneyShort(counts.atRisk)} at risk
+      <header style={{ padding: "20px 24px 0", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
+        {/* Title row */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600, color: "#161b2e", margin: 0 }}>
+            Hey CodeCrafters
           </h1>
           <form onSubmit={submitSearch}>
             <input
@@ -143,8 +144,24 @@ function Queue() {
             />
           </form>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5">
+
+        {/* Stat squares */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+          {[
+            { label: "Total cases",   value: queue.length.toLocaleString(),             accent: "#3b82f6", bg: "rgba(59,130,246,0.10)",  border: "rgba(59,130,246,0.25)" },
+            { label: "Reviewed",      value: counts.reviewed.toLocaleString(),           accent: "#6366f1", bg: "rgba(99,102,241,0.10)",  border: "rgba(99,102,241,0.25)" },
+            { label: "At risk",       value: formatMoneyShort(counts.atRisk),            accent: "#ef4444", bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.25)"  },
+          ].map((s) => (
+            <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, padding: "12px 16px", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+              <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#667088", margin: "0 0 4px" }}>{s.label}</p>
+              <p style={{ fontSize: 20, fontWeight: 700, fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums", color: s.accent, margin: 0 }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingBottom: 14 }}>
+          <div style={{ display: "flex", gap: 6 }}>
             {(["all", "unreviewed", "confirmed", "cleared"] as Tab[]).map((t) => (
               <button
                 key={t}
