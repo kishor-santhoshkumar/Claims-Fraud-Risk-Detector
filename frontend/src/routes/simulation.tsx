@@ -57,6 +57,7 @@ const COLOR_PULSE     = "#60a5fa";
 
 type SimStage = "intro" | "entering-rf" | "pause" | "split" | "to-xgb" | "scoring" | "done" | "closing" | "closed";
 
+// Only the main pipeline — done/closing/closed handled by separate useEffects
 function stageAfter(stage: SimStage): SimStage | null {
   const map: Partial<Record<SimStage, SimStage>> = {
     intro: "entering-rf",
@@ -65,23 +66,19 @@ function stageAfter(stage: SimStage): SimStage | null {
     split: "to-xgb",
     "to-xgb": "scoring",
     scoring: "done",
-    done: "closing",
-    closing: "closed",
   };
   return map[stage] ?? null;
 }
 
 function stageDuration(stage: SimStage, dotCount: number, keptCount: number): number {
   switch (stage) {
-    case "intro":        return 700;
-    case "entering-rf":  return dotCount * STAGGER_MS + ENTER_DUR_MS + 150;
-    case "pause":        return 350;
-    case "split":        return 900;
-    case "to-xgb":      return Math.max(keptCount * STAGGER_MS + ENTER_DUR_MS + 300, 600);
-    case "scoring":      return 500;
-    case "done":         return 700;
-    case "closing":      return 400;
-    default:             return 0;
+    case "intro":       return 700;
+    case "entering-rf": return dotCount * STAGGER_MS + ENTER_DUR_MS + 150;
+    case "pause":       return 350;
+    case "split":       return 900;
+    case "to-xgb":     return Math.max(keptCount * STAGGER_MS + ENTER_DUR_MS + 300, 600);
+    case "scoring":     return 500;
+    default:            return 0;
   }
 }
 
@@ -166,16 +163,31 @@ function SimulationLoadingIntro({ onDone }: { onDone: () => void }) {
   const dotCount = DOT_CAP;
   const keptCount = Math.max(1, Math.round(dotCount * PASS_RATE));
 
+  // Main pipeline: intro → entering-rf → pause → split → to-xgb → scoring → done
   useEffect(() => {
     const next = stageAfter(stage);
-    if (next === "closed" || !next) {
-      onDoneRef.current();
-      return;
-    }
+    if (!next) return;
     const ms = stageDuration(stage, dotCount, keptCount);
     const id = setTimeout(() => setStage(next), ms);
     return () => clearTimeout(id);
   }, [stage, dotCount, keptCount]);
+
+  // Hold the "done" result briefly, then start fade-out
+  useEffect(() => {
+    if (stage !== "done") return;
+    const id = setTimeout(() => setStage("closing"), 700);
+    return () => clearTimeout(id);
+  }, [stage]);
+
+  // Fade-out completes → notify parent (simulation page can now render)
+  useEffect(() => {
+    if (stage !== "closing") return;
+    const id = setTimeout(() => {
+      setStage("closed");
+      onDoneRef.current();
+    }, 400);
+    return () => clearTimeout(id);
+  }, [stage]);
 
   if (stage === "closed") return null;
 
@@ -273,11 +285,12 @@ function Simulation() {
     { label: "Investigator hours per week", value: `${hours} h`,                    accent: "border-l-violet-500",  text: "#7c3aed" },
   ];
 
-  return (
-    <>
-      {showIntro && <SimulationLoadingIntro onDone={handleIntroDone} />}
+  if (showIntro) {
+    return <SimulationLoadingIntro onDone={handleIntroDone} />;
+  }
 
-      <div style={{ padding: "0 24px 64px" }}>
+  return (
+    <div style={{ padding: "0 24px 64px" }}>
         <header style={{ paddingTop: 24, paddingBottom: 20 }}>
           <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e", margin: 0 }}>Capacity simulation</h1>
           <p style={{ marginTop: 4, fontSize: 13, color: "#667088", marginBottom: 0 }}>
@@ -378,7 +391,7 @@ function Simulation() {
             </p>
           )}
         </div>
-      </div>
-    </>
+    </div>
   );
 }
+
