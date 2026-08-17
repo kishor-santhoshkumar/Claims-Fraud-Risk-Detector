@@ -29,8 +29,8 @@ OUTPUTS = Path(__file__).resolve().parent.parent / "outputs"
 _NARRATIVES_PATH = OUTPUTS / "narratives.json"
 
 # Swap these constants when Groq updates its model roster.
-_MODEL_HIGH = "llama-3.3-70b-versatile"   # large model for high-tier providers
-_MODEL_MEDIUM = "llama-3.1-8b-instant"    # fast model for medium-tier providers
+_MODEL_HIGH = "openai/gpt-oss-120b"   # large model for high-tier providers
+_MODEL_MEDIUM = "openai/gpt-oss-20b"  # fast model for medium-tier providers
 
 # Terms that must never appear in the assembled prompt — their presence means
 # the evidence layer is leaking raw ML outputs into the narrator input.
