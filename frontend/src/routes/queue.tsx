@@ -10,6 +10,7 @@ export const Route = createFileRoute("/queue")({
 
 type FilterTab = "flagged" | "high" | "medium" | "all";
 type GroupBy = "none" | "risk" | "state" | "reimbursed";
+type SortDir = "desc" | "asc";
 
 function TierBadge({ tier }: { tier: CaseProvider["risk_tier"] }) {
   const map = {
@@ -45,7 +46,9 @@ interface Section {
   providers: CaseProvider[];
 }
 
-function buildSections(providers: CaseProvider[], groupBy: GroupBy): Section[] {
+function buildSections(providers: CaseProvider[], groupBy: GroupBy, sortDir: SortDir): Section[] {
+  const flip = sortDir === "asc";
+
   if (groupBy === "none") {
     return [{ key: "all", title: "All", accent: "#3b82f6", providers }];
   }
@@ -55,7 +58,8 @@ function buildSections(providers: CaseProvider[], groupBy: GroupBy): Section[] {
       ["medium", "Medium Risk", "#f59e0b"],
       ["low", "Low Risk", "#10b981"],
     ];
-    return tiers
+    const ordered = flip ? [...tiers].reverse() : tiers;
+    return ordered
       .map(([tier, title, accent]) => ({ key: tier, title, accent, providers: providers.filter(p => p.risk_tier === tier) }))
       .filter(s => s.providers.length > 0);
   }
@@ -67,7 +71,7 @@ function buildSections(providers: CaseProvider[], groupBy: GroupBy): Section[] {
       map.get(s)!.push(p);
     }
     return [...map.entries()]
-      .sort((a, b) => b[1].length - a[1].length)
+      .sort((a, b) => flip ? a[0].localeCompare(b[0]) : b[1].length - a[1].length)
       .map(([state, ps]) => ({ key: state, title: state, accent: "#3b82f6", providers: ps }));
   }
   if (groupBy === "reimbursed") {
@@ -78,7 +82,10 @@ function buildSections(providers: CaseProvider[], groupBy: GroupBy): Section[] {
       map.get(lbl)!.push(p);
     }
     return [...map.entries()]
-      .sort((a, b) => REIMBURSED_ORDER[a[0]]! - REIMBURSED_ORDER[b[0]]!)
+      .sort((a, b) => {
+        const diff = REIMBURSED_ORDER[a[0]]! - REIMBURSED_ORDER[b[0]]!;
+        return flip ? -diff : diff;
+      })
       .map(([lbl, ps]) => ({ key: lbl, title: lbl, accent: REIMBURSED_ACCENT[lbl] ?? "#3b82f6", providers: ps }));
   }
   return [];
@@ -91,15 +98,16 @@ function QueuePage() {
   const { providers, loading, error, setStatus } = useCaseStore();
   const [filterTab, setFilterTab] = useState<FilterTab>("flagged");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchInput, setSearchInput] = useState("");
   const [searchResult, setSearchResult] = useState<CaseProvider | null>(null);
   const [pageLimits, setPageLimits] = useState<Record<string, number>>({});
 
-  useEffect(() => { setPageLimits({}); }, [filterTab, groupBy]);
+  useEffect(() => { setPageLimits({}); }, [filterTab, groupBy, sortDir]);
 
   const sorted = useMemo(
-    () => [...providers].sort((a, b) => b.expected_loss - a.expected_loss),
-    [providers]
+    () => [...providers].sort((a, b) => sortDir === "desc" ? b.expected_loss - a.expected_loss : a.expected_loss - b.expected_loss),
+    [providers, sortDir]
   );
 
   const filtered = useMemo(() => {
@@ -109,7 +117,7 @@ function QueuePage() {
     return sorted;
   }, [sorted, filterTab]);
 
-  const sections = useMemo(() => buildSections(filtered, groupBy), [filtered, groupBy]);
+  const sections = useMemo(() => buildSections(filtered, groupBy, sortDir), [filtered, groupBy, sortDir]);
 
   const counts = useMemo(() => ({
     flagged: sorted.filter(p => p.risk_tier !== "low").length,
@@ -227,6 +235,23 @@ function QueuePage() {
               <option value="state">State</option>
               <option value="reimbursed">Total Reimbursed</option>
             </select>
+            <button
+              onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")}
+              title={sortDir === "desc" ? "Descending — click to switch to ascending" : "Ascending — click to switch to descending"}
+              style={{
+                height: 30, padding: "0 10px", borderRadius: 8,
+                border: "1px solid rgba(100,116,139,0.22)",
+                background: "rgba(255,255,255,0.7)",
+                color: "#232a41", fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 4,
+                transition: "background 0.15s, border-color 0.15s",
+              }}
+              onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(59,130,246,0.1)"; b.style.borderColor = "rgba(59,130,246,0.35)"; b.style.color = "#1d4ed8"; }}
+              onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.7)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "#232a41"; }}
+            >
+              {sortDir === "desc" ? "↓" : "↑"}
+              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.03em" }}>{sortDir === "desc" ? "Desc" : "Asc"}</span>
+            </button>
           </div>
         </div>
       </header>
