@@ -329,14 +329,20 @@ export async function fetchFingerprint(): Promise<FingerprintResponse> {
   return apiFetch<FingerprintResponse>("/fingerprint");
 }
 
-/** POST /chat — general assistant with optional provider evidence context. */
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** POST /chat — general assistant with optional provider evidence context and conversation history. */
 export async function chatWithAssistant(
   message: string,
   providerIds: string[] = [],
+  history: ChatHistoryMessage[] = [],
 ): Promise<string> {
   const data = await apiFetch<{ reply: string }>("/chat", {
     method: "POST",
-    body: JSON.stringify({ message, provider_ids: providerIds }),
+    body: JSON.stringify({ message, provider_ids: providerIds, history }),
   });
   return data.reply;
 }

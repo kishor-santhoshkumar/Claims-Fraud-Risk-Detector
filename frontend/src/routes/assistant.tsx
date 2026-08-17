@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCaseStore } from "@/lib/caseStore";
-import { chatWithAssistant } from "@/lib/api";
+import { chatWithAssistant, type ChatHistoryMessage } from "@/lib/api";
 
 export const Route = createFileRoute("/assistant")({
   component: Assistant,
@@ -55,6 +55,12 @@ function Assistant() {
     if (!text || pending) return;
 
     setInput("");
+
+    // Snapshot history before adding the new user message (skip initial greeting + errors)
+    const history: ChatHistoryMessage[] = messages
+      .filter((m) => m.id !== 0 && !m.error)
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.text }));
+
     const userMsg: Msg = { id: Date.now(), role: "user", text };
     setMessages((m) => [...m, userMsg]);
     setPending(true);
@@ -62,7 +68,7 @@ function Assistant() {
     const providerIds = extractProviderIds(text);
 
     try {
-      const reply = await chatWithAssistant(text, providerIds);
+      const reply = await chatWithAssistant(text, providerIds, history);
       setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", text: reply }]);
     } catch {
       setMessages((m) => [

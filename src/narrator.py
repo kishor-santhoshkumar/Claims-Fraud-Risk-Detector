@@ -144,6 +144,32 @@ def _call_groq(system: str, user: str, model: str) -> Optional[str]:
     return None
 
 
+def _call_groq_messages(messages: list[dict], model: str) -> Optional[str]:
+    """Call Groq with a pre-built messages array — used for multi-turn chat."""
+    _init_clients()
+    n_keys = len(_groq_clients)
+    delay = 2.0
+    for _ in range(3 * n_keys):
+        idx = next(_key_cycle)
+        client = _groq_clients[idx]
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0,
+                max_tokens=400,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as exc:
+            err = str(exc).lower()
+            if "429" in err or "rate" in err or "limit" in err:
+                time.sleep(delay)
+                delay = min(delay * 2, 30.0)
+                continue
+            raise
+    return None
+
+
 # ── System prompts ─────────────────────────────────────────────────────────────
 
 _SYSTEM_CASE = (

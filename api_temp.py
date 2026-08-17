@@ -1089,9 +1089,15 @@ def explain_provider_get(provider_id: str):
 
 # ── Chat assistant endpoint ───────────────────────────────────────────────────
 
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     provider_ids: list[str] = []
+    history: list[HistoryMessage] = []
 
 
 class ChatResponse(BaseModel):
@@ -1114,12 +1120,13 @@ _CHAT_SYSTEM = (
 
 @app.post("/chat", response_model=ChatResponse, summary="Chat assistant with optional provider context")
 def chat_assistant(body: ChatRequest):
-    """General-purpose chat assistant.
+    """General-purpose chat assistant with multi-turn conversation history.
 
     Pass provider_ids to include their evidence as context (extracted from @mentions in the UI).
+    Pass history as [{role, content}] pairs for conversational continuity within a session.
     Returns 503 if all Groq keys are rate-limited.
     """
-    from src.narrator import _call_groq, _MODEL_MEDIUM
+    from src.narrator import _call_groq_messages, _MODEL_MEDIUM
 
     # Build evidence context for each mentioned provider (cap at 3)
     context_blocks: list[str] = []
@@ -1137,7 +1144,13 @@ def chat_assistant(body: ChatRequest):
     else:
         user_prompt = body.message
 
-    result = _call_groq(_CHAT_SYSTEM, user_prompt, _MODEL_MEDIUM)
+    # Build full messages array: system + prior history (capped) + current turn
+    messages: list[dict] = [{"role": "system", "content": _CHAT_SYSTEM}]
+    for h in body.history[-20:]:
+        messages.append({"role": h.role, "content": h.content})
+    messages.append({"role": "user", "content": user_prompt})
+
+    result = _call_groq_messages(messages, _MODEL_MEDIUM)
     if result is None:
         raise HTTPException(
             status_code=503,
