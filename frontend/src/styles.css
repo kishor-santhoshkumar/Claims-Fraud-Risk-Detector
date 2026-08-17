@@ -344,3 +344,29 @@ body {
   .sim-overlay-track { transition: none !important; }
   .sim-overlay-backdrop { transition: none; }
 }
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --glass-bg:        linear-gradient(160deg, rgba(22,28,52,0.90) 0%, rgba(15,20,44,0.84) 55%, rgba(22,14,42,0.82) 100%);
+  --glass-bg-strong: linear-gradient(160deg, rgba(28,35,60,0.94) 0%, rgba(18,24,52,0.88) 100%);
+  --glass-bg-soft:   linear-gradient(160deg, rgba(20,26,48,0.80) 0%, rgba(16,22,42,0.70) 100%);
+  --glass-border:    rgba(255,255,255,0.07);
+  --glass-border-soft: rgba(255,255,255,0.10);
+  --hairline:        rgba(255,255,255,0.06);
+  --shadow-glass:    0 10px 30px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-glass-lg: 0 24px 60px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.30);
+  --page-gradient:
+    radial-gradient(circle at 10%  6%, rgba(99,102,241,0.18) 0%, transparent 42%),
+    radial-gradient(circle at 90% 10%, rgba(56,189,248,0.14) 0%, transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(236,72,153,0.12) 0%, transparent 48%),
+    radial-gradient(circle at  8% 92%, rgba(16,185,129,0.10) 0%, transparent 45%),
+    linear-gradient(160deg, #0d1117 0%, #111827 45%, #0f0d1e 100%);
+}
+
+[data-theme="dark"] body {
+  background: var(--page-gradient);
+}
+
+[data-theme="dark"] .ambient-bg--subtle .ambient-blob--a { opacity: 0.06; }
+[data-theme="dark"] .ambient-bg--subtle .ambient-blob--b { opacity: 0.05; }
+[data-theme="dark"] .ambient-bg--subtle .ambient-blob--c { opacity: 0.04; }
