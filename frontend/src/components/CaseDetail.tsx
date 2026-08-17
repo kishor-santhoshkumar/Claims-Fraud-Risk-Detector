@@ -108,28 +108,26 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
           <button
             onClick={() => decide("needs_info", "marked as needing information")}
             style={{
-              background: "rgba(15,23,42,0.08)",
-              border: "1px solid rgba(15,23,42,0.45)",
-              color: "#0f172a",
+              background: "rgba(0,0,0,0.05)",
+              border: "2px solid #111111",
+              color: "#111111",
               padding: "8px 12px",
               fontSize: 13,
               fontWeight: 600,
               fontFamily: "inherit",
               borderRadius: 6,
               cursor: "pointer",
-              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+              transition: "background 0.15s, color 0.15s",
             }}
             onMouseEnter={(e) => {
               const b = e.currentTarget;
-              b.style.background = "#0f172a";
-              b.style.borderColor = "#0f172a";
+              b.style.background = "#111111";
               b.style.color = "#ffffff";
             }}
             onMouseLeave={(e) => {
               const b = e.currentTarget;
-              b.style.background = "rgba(15,23,42,0.08)";
-              b.style.borderColor = "rgba(15,23,42,0.45)";
-              b.style.color = "#0f172a";
+              b.style.background = "rgba(0,0,0,0.05)";
+              b.style.color = "#111111";
             }}
           >
             Need info
@@ -140,28 +138,26 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
           <button
             onClick={() => setExplaining(true)}
             style={{
-              background: "rgba(15,23,42,0.08)",
-              border: "1px solid rgba(15,23,42,0.45)",
-              color: "#0f172a",
+              background: "rgba(0,0,0,0.05)",
+              border: "2px solid #111111",
+              color: "#111111",
               padding: "8px 14px",
               fontSize: 13,
               fontWeight: 600,
               fontFamily: "inherit",
               borderRadius: 6,
               cursor: "pointer",
-              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+              transition: "background 0.15s, color 0.15s",
             }}
             onMouseEnter={(e) => {
               const b = e.currentTarget;
-              b.style.background = "#0f172a";
-              b.style.borderColor = "#0f172a";
+              b.style.background = "#111111";
               b.style.color = "#ffffff";
             }}
             onMouseLeave={(e) => {
               const b = e.currentTarget;
-              b.style.background = "rgba(15,23,42,0.08)";
-              b.style.borderColor = "rgba(15,23,42,0.45)";
-              b.style.color = "#0f172a";
+              b.style.background = "rgba(0,0,0,0.05)";
+              b.style.color = "#111111";
             }}
           >
             Why was this not flagged?
@@ -174,28 +170,26 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
               });
             }}
             style={{
-              background: "rgba(15,23,42,0.08)",
-              border: "1px solid rgba(15,23,42,0.45)",
-              color: "#0f172a",
+              background: "rgba(0,0,0,0.05)",
+              border: "2px solid #111111",
+              color: "#111111",
               padding: "8px 14px",
               fontSize: 13,
               fontWeight: 600,
               fontFamily: "inherit",
               borderRadius: 6,
               cursor: "pointer",
-              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+              transition: "background 0.15s, color 0.15s",
             }}
             onMouseEnter={(e) => {
               const b = e.currentTarget;
-              b.style.background = "#0f172a";
-              b.style.borderColor = "#0f172a";
+              b.style.background = "#111111";
               b.style.color = "#ffffff";
             }}
             onMouseLeave={(e) => {
               const b = e.currentTarget;
-              b.style.background = "rgba(15,23,42,0.08)";
-              b.style.borderColor = "rgba(15,23,42,0.45)";
-              b.style.color = "#0f172a";
+              b.style.background = "rgba(0,0,0,0.05)";
+              b.style.color = "#111111";
             }}
           >
             Flag for review anyway
@@ -209,28 +203,26 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
           style={{
             marginTop: 8,
             width: "100%",
-            background: "rgba(15,23,42,0.08)",
-            border: "1px solid rgba(15,23,42,0.45)",
-            color: "#0f172a",
+            background: "rgba(0,0,0,0.05)",
+            border: "2px solid #111111",
+            color: "#111111",
             padding: "8px 12px",
             fontSize: 13,
             fontWeight: 600,
             fontFamily: "inherit",
             borderRadius: 6,
             cursor: "pointer",
-            transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            transition: "background 0.15s, color 0.15s",
           }}
           onMouseEnter={(e) => {
             const b = e.currentTarget;
-            b.style.background = "#0f172a";
-            b.style.borderColor = "#0f172a";
+            b.style.background = "#111111";
             b.style.color = "#ffffff";
           }}
           onMouseLeave={(e) => {
             const b = e.currentTarget;
-            b.style.background = "rgba(15,23,42,0.08)";
-            b.style.borderColor = "rgba(15,23,42,0.45)";
-            b.style.color = "#0f172a";
+            b.style.background = "rgba(0,0,0,0.05)";
+            b.style.color = "#111111";
           }}
         >
           Explain this case
