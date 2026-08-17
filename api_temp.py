@@ -109,6 +109,19 @@ _DISPOSITIONS: dict[str, str] = {}
 # Lazy claims cache — loaded on first /provider/{id}/claims call
 _CLAIMS_DF: dict[str, pd.DataFrame | None] = {"ip": None, "op": None}
 
+# Claim-level scoring population stats (loaded from outputs/claim_pop_stats.json at startup)
+_CLAIM_POP_STATS: dict = {}
+
+# Rule weights — must match src/claim_scorer.RULE_WEIGHTS exactly
+_CLAIM_RULE_WEIGHTS: dict[str, float] = {
+    "POST_DEATH_CLAIM":        0.40,
+    "DUPLICATE_CLAIM":         0.35,
+    "DISCHARGE_BEFORE_ADMIT":  0.30,
+    "SHORT_STAY_HIGH_COST":    0.25,
+    "MISSING_ATTENDING":       0.20,
+    "SAME_DAY_MULTI_PROVIDER": 0.20,
+}
+
 # CMS state code → abbreviation (Medicare beneficiary CSV uses numeric codes)
 _CMS_STATE: dict[str, str] = {
     "1": "AL", "2": "AK", "3": "AZ", "4": "AR", "5": "CA", "6": "CO",
@@ -141,6 +154,7 @@ def _load_providers() -> None:
         f"low={_TIER_COUNTS['low']}"
     )
     _load_enrichment()
+    _load_claim_pop_stats()
     print(f"[api_temp] Peak RSS after startup: {_rss_mb():.0f} MB")
 
 
@@ -189,6 +203,73 @@ def _load_enrichment() -> None:
         print(f"[api_temp] State enrichment done for {len(_ENRICHMENT):,} providers.")
     except Exception as e:
         print(f"[api_temp] State enrichment failed: {e}")
+
+
+def _load_claim_pop_stats() -> None:
+    """Load pre-computed claim population stats used for inline scoring."""
+    stats_path = OUTPUTS / "claim_pop_stats.json"
+    if not stats_path.exists():
+        print("[api_temp] claim_pop_stats.json missing — inline claim scoring disabled.")
+        return
+    with open(stats_path) as f:
+        _CLAIM_POP_STATS.update(json.load(f))
+    print(
+        f"[api_temp] Claim pop stats: median=${_CLAIM_POP_STATS['pop_median']:.0f} "
+        f"p99={_CLAIM_POP_STATS['p99']:.4f} p95={_CLAIM_POP_STATS['p95']:.4f}"
+    )
+
+
+def _score_claim_inline(
+    rule_flags: list[str],
+    amount: float,
+    all_provider_amounts: list[float],
+) -> tuple[float, str, float, float]:
+    """Compute claim_risk_score, tier, within_z, cross_z for one claim.
+
+    Uses the pre-computed population stats from claim_pop_stats.json.
+    Falls back to rule-only scoring if pop stats are unavailable.
+    Returns (score, tier, within_z, cross_z).
+    """
+    import math
+
+    rule_score = min(sum(_CLAIM_RULE_WEIGHTS.get(f, 0.0) for f in rule_flags), 1.0)
+
+    # within-provider z
+    n = len(all_provider_amounts)
+    if n > 1:
+        mean = sum(all_provider_amounts) / n
+        variance = sum((x - mean) ** 2 for x in all_provider_amounts) / (n - 1)
+        std = variance ** 0.5
+        within_z = (amount - mean) / std if std > 0 else 0.0
+    else:
+        within_z = 0.0
+
+    # cross-provider z using pre-computed MAD
+    pop_median = _CLAIM_POP_STATS.get("pop_median", 80.0)
+    pop_mad    = _CLAIM_POP_STATS.get("pop_mad", 60.0)
+    cross_z = (amount - pop_median) / (1.4826 * pop_mad) if pop_mad > 0 else 0.0
+
+    def _sig(x: float) -> float:
+        x = max(-15.0, min(15.0, x))
+        return 1.0 / (1.0 + math.exp(-x))
+
+    score = (
+        0.5 * rule_score
+        + 0.3 * _sig(within_z / 3.0)
+        + 0.2 * _sig(cross_z / 3.0)
+    )
+    score = round(max(0.0, min(1.0, score)), 4)
+
+    p99 = _CLAIM_POP_STATS.get("p99", 0.4464)
+    p95 = _CLAIM_POP_STATS.get("p95", 0.3923)
+    if score >= p99:
+        tier = "high"
+    elif score >= p95:
+        tier = "medium"
+    else:
+        tier = "low"
+
+    return score, tier, round(within_z, 4), round(cross_z, 4)
 
 
 # ── Lazy model cache for POST /score ─────────────────────────────────────────
@@ -899,8 +980,11 @@ def _generate_synthetic_claims(
 
 
 def _apply_claim_rules(rows: list[ClaimRow]) -> list[ClaimRow]:
-    """Evaluate claim-level rules from rules.yaml and set rule_flag on violating rows."""
+    """Evaluate claim-level rules and populate both rule_flag (compat) and rule_flags (list)."""
     from collections import defaultdict
+
+    # Build per-row flag sets
+    flags: list[set[str]] = [set() for _ in rows]
 
     # DUPLICATE_CLAIM: same beneficiary + start + end + amount
     dupe_idx: dict = defaultdict(list)
@@ -909,8 +993,7 @@ def _apply_claim_rules(rows: list[ClaimRow]) -> list[ClaimRow]:
     for indices in dupe_idx.values():
         if len(indices) >= 2:
             for i in indices:
-                if not rows[i].rule_flag:
-                    rows[i].rule_flag = "DUPLICATE_CLAIM"
+                flags[i].add("DUPLICATE_CLAIM")
 
     # SAME_DAY_REPEAT: same beneficiary billed 5+ times on the same date
     repeat_idx: dict = defaultdict(list)
@@ -919,27 +1002,36 @@ def _apply_claim_rules(rows: list[ClaimRow]) -> list[ClaimRow]:
     for indices in repeat_idx.values():
         if len(indices) >= 5:
             for i in indices:
-                if not rows[i].rule_flag:
-                    rows[i].rule_flag = "SAME_DAY_REPEAT"
+                flags[i].add("SAME_DAY_REPEAT")
 
     # SHORT_STAY_HIGH_COST: inpatient, ≤2 day stay, reimbursed > $30,000
-    for r in rows:
-        if not r.rule_flag and r.claim_type == "inpatient" and r.amount_reimbursed > 30_000:
+    for i, r in enumerate(rows):
+        if r.claim_type == "inpatient" and r.amount_reimbursed > 30_000:
             try:
                 stay = (date.fromisoformat(r.claim_end_dt) - date.fromisoformat(r.claim_start_dt)).days
                 if stay <= 2:
-                    r.rule_flag = "SHORT_STAY_HIGH_COST"
+                    flags[i].add("SHORT_STAY_HIGH_COST")
             except (ValueError, TypeError):
                 pass
 
     # DISCHARGE_BEFORE_ADMIT: end date precedes start date
-    for r in rows:
-        if not r.rule_flag:
-            try:
-                if r.claim_end_dt < r.claim_start_dt:
-                    r.rule_flag = "DISCHARGE_BEFORE_ADMIT"
-            except TypeError:
-                pass
+    for i, r in enumerate(rows):
+        try:
+            if r.claim_end_dt < r.claim_start_dt:
+                flags[i].add("DISCHARGE_BEFORE_ADMIT")
+        except TypeError:
+            pass
+
+    # MISSING_ATTENDING: inpatient with no attending physician
+    for i, r in enumerate(rows):
+        if r.claim_type == "inpatient" and not r.attending_physician:
+            flags[i].add("MISSING_ATTENDING")
+
+    # Apply flags to rows
+    for i, r in enumerate(rows):
+        fl = sorted(flags[i])
+        r.rule_flags = fl
+        r.rule_flag = fl[0] if fl else None
 
     return rows
 
@@ -975,19 +1067,15 @@ def get_provider_claims(
     # Evaluate claim-level rules and flag violations
     rows = _apply_claim_rules(rows)
 
-    # Attach claim-level scores from the index if available
-    try:
-        _, claim_index = _load_claim_data()
+    # Compute claim-level scores inline — works for both real CSV and synthetic claims
+    if _CLAIM_POP_STATS:
+        all_amounts = [r.amount_reimbursed for r in rows]
         for r in rows:
-            entry = claim_index.get(r.claim_id)
-            if entry:
-                r.claim_risk_score = entry.get("claim_risk_score")
-                r.claim_risk_tier = entry.get("claim_risk_tier")
-                r.rule_flags = entry.get("rule_flags", [])
-                r.within_z = entry.get("within_z")
-                r.cross_z = entry.get("cross_z")
-    except HTTPException:
-        pass  # scored_claims.json not yet generated — scores stay null
+            score, tier, wz, cz = _score_claim_inline(r.rule_flags, r.amount_reimbursed, all_amounts)
+            r.claim_risk_score = score
+            r.claim_risk_tier = tier
+            r.within_z = wz
+            r.cross_z = cz
 
     rows.sort(key=lambda c: c.claim_start_dt)
     total = len(rows)

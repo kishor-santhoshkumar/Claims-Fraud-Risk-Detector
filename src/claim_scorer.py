@@ -432,6 +432,17 @@ def write_outputs(claims: pd.DataFrame) -> None:
         json.dump(index, f, ensure_ascii=False)
     print(f"[claim_scorer] Wrote {len(index):,} flagged claims -> outputs/claim_score_index.json")
 
+    # Population stats used by api_temp.py for inline scoring of any claim
+    amt = claims["InscClaimAmtReimbursed"].values
+    pop_median = float(np.median(amt))
+    pop_mad    = float(np.median(np.abs(amt - pop_median)))
+    p99 = float(claims["_p99"].iloc[0])
+    p95 = float(claims["_p95"].iloc[0])
+    pop_stats = dict(pop_median=pop_median, pop_mad=pop_mad, p99=p99, p95=p95)
+    with open(OUTPUTS / "claim_pop_stats.json", "w", encoding="utf-8") as f:
+        json.dump(pop_stats, f, indent=2)
+    print(f"[claim_scorer] Wrote claim_pop_stats.json: median=${pop_median:.0f} p99={p99:.4f}")
+
     # Verification table - top 10 by rank key
     print("\n[claim_scorer] Top 10 by risk x amount:")
     print(f"{'ClaimID':<22} {'Provider':<12} {'Tier':<8} {'Score':>6} {'Amount':>10}  Flags")
