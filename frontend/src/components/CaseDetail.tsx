@@ -107,7 +107,30 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
           </button>
           <button
             onClick={() => decide("needs_info", "marked as needing information")}
-            className="border border-border px-3 py-2 text-[13px] hover:bg-muted"
+            style={{
+              background: "rgba(245,158,11,0.12)",
+              border: "1px solid rgba(245,158,11,0.50)",
+              color: "#92400e",
+              padding: "8px 12px",
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              borderRadius: 6,
+              cursor: "pointer",
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              const b = e.currentTarget;
+              b.style.background = "rgba(245,158,11,0.85)";
+              b.style.borderColor = "#f59e0b";
+              b.style.color = "#ffffff";
+            }}
+            onMouseLeave={(e) => {
+              const b = e.currentTarget;
+              b.style.background = "rgba(245,158,11,0.12)";
+              b.style.borderColor = "rgba(245,158,11,0.50)";
+              b.style.color = "#92400e";
+            }}
           >
             Need info
           </button>
@@ -116,7 +139,30 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setExplaining(true)}
-            className="border border-foreground/30 bg-muted px-3 py-2 text-[13px]"
+            style={{
+              background: "rgba(99,102,241,0.10)",
+              border: "1px solid rgba(99,102,241,0.40)",
+              color: "#4338ca",
+              padding: "8px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              borderRadius: 6,
+              cursor: "pointer",
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              const b = e.currentTarget;
+              b.style.background = "rgba(99,102,241,0.85)";
+              b.style.borderColor = "#6366f1";
+              b.style.color = "#ffffff";
+            }}
+            onMouseLeave={(e) => {
+              const b = e.currentTarget;
+              b.style.background = "rgba(99,102,241,0.10)";
+              b.style.borderColor = "rgba(99,102,241,0.40)";
+              b.style.color = "#4338ca";
+            }}
           >
             Why was this not flagged?
           </button>
@@ -127,7 +173,30 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
                 action: { label: "Undo", onClick: () => setStatus(provider.provider_id, "unreviewed") },
               });
             }}
-            className="border border-border px-3 py-2 text-[13px] hover:bg-muted"
+            style={{
+              background: "rgba(245,158,11,0.12)",
+              border: "1px solid rgba(245,158,11,0.50)",
+              color: "#92400e",
+              padding: "8px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              borderRadius: 6,
+              cursor: "pointer",
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              const b = e.currentTarget;
+              b.style.background = "rgba(245,158,11,0.85)";
+              b.style.borderColor = "#f59e0b";
+              b.style.color = "#ffffff";
+            }}
+            onMouseLeave={(e) => {
+              const b = e.currentTarget;
+              b.style.background = "rgba(245,158,11,0.12)";
+              b.style.borderColor = "rgba(245,158,11,0.50)";
+              b.style.color = "#92400e";
+            }}
           >
             Flag for review anyway
           </button>
@@ -137,7 +206,32 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
       {variant === "case" && (
         <button
           onClick={() => setExplaining(true)}
-          className="mt-2 w-full border border-border px-3 py-2 text-[13px] hover:bg-muted"
+          style={{
+            marginTop: 8,
+            width: "100%",
+            background: "rgba(99,102,241,0.10)",
+            border: "1px solid rgba(99,102,241,0.40)",
+            color: "#4338ca",
+            padding: "8px 12px",
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: "inherit",
+            borderRadius: 6,
+            cursor: "pointer",
+            transition: "background 0.15s, border-color 0.15s, color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            const b = e.currentTarget;
+            b.style.background = "rgba(99,102,241,0.85)";
+            b.style.borderColor = "#6366f1";
+            b.style.color = "#ffffff";
+          }}
+          onMouseLeave={(e) => {
+            const b = e.currentTarget;
+            b.style.background = "rgba(99,102,241,0.10)";
+            b.style.borderColor = "rgba(99,102,241,0.40)";
+            b.style.color = "#4338ca";
+          }}
         >
           Explain this case
         </button>
