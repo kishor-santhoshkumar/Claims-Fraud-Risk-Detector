@@ -21,22 +21,42 @@ function extractProviderIds(text: string): string[] {
     .filter(Boolean);
 }
 
+const INITIAL_MSG: Msg = {
+  id: 0,
+  role: "assistant",
+  text: "Ask me anything about the Medicare fraud review. Tag a provider with @ to include their evidence — for example: \"@PRV52985 why was this provider flagged?\"",
+};
+
+function loadSession<T>(key: string, fallback: T): T {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function Assistant() {
   const { providers } = useCaseStore();
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      id: 0,
-      role: "assistant",
-      text: "Ask me anything about the Medicare fraud review. Tag a provider with @ to include their evidence — for example: \"@PRV52985 why was this provider flagged?\"",
-    },
-  ]);
+  const [messages, setMessages] = useState<Msg[]>(() =>
+    loadSession<Msg[]>("chat_messages", [INITIAL_MSG])
+  );
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
-  // Accumulate every provider ever mentioned in this session so follow-up
-  // questions always get evidence re-injected — even without a new @mention.
-  const [sessionProviders, setSessionProviders] = useState<string[]>([]);
+  const [sessionProviders, setSessionProviders] = useState<string[]>(() =>
+    loadSession<string[]>("chat_session_providers", [])
+  );
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Persist to sessionStorage whenever state changes (survives tab switches, clears on refresh)
+  useEffect(() => {
+    try { sessionStorage.setItem("chat_messages", JSON.stringify(messages)); } catch {}
+  }, [messages]);
+
+  useEffect(() => {
+    try { sessionStorage.setItem("chat_session_providers", JSON.stringify(sessionProviders)); } catch {}
+  }, [sessionProviders]);
 
   // Autocomplete suggestions when typing @...
   const suggestions = useMemo(() => {
