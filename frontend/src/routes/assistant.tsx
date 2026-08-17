@@ -32,6 +32,9 @@ function Assistant() {
   ]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
+  // Accumulate every provider ever mentioned in this session so follow-up
+  // questions always get evidence re-injected — even without a new @mention.
+  const [sessionProviders, setSessionProviders] = useState<string[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -65,10 +68,13 @@ function Assistant() {
     setMessages((m) => [...m, userMsg]);
     setPending(true);
 
-    const providerIds = extractProviderIds(text);
+    // Merge new @mentions with all providers seen so far this session
+    const newIds = extractProviderIds(text);
+    const allProviderIds = Array.from(new Set([...sessionProviders, ...newIds]));
+    if (newIds.length > 0) setSessionProviders(allProviderIds);
 
     try {
-      const reply = await chatWithAssistant(text, providerIds, history);
+      const reply = await chatWithAssistant(text, allProviderIds, history);
       setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", text: reply }]);
     } catch {
       setMessages((m) => [
