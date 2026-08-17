@@ -618,6 +618,8 @@ class ClaimRow(BaseModel):
     admission_dt: Optional[str]
     discharge_dt: Optional[str]
     rule_flag: Optional[str] = None
+    claim_risk_score: Optional[float] = None
+    claim_risk_tier: Optional[str] = None
 
 
 class ClaimsResponse(BaseModel):
@@ -970,6 +972,17 @@ def get_provider_claims(
     # Evaluate claim-level rules and flag violations
     rows = _apply_claim_rules(rows)
 
+    # Attach claim-level scores from the index if available
+    try:
+        _, claim_index = _load_claim_data()
+        for r in rows:
+            entry = claim_index.get(r.claim_id)
+            if entry:
+                r.claim_risk_score = entry.get("claim_risk_score")
+                r.claim_risk_tier = entry.get("claim_risk_tier")
+    except HTTPException:
+        pass  # scored_claims.json not yet generated — scores stay null
+
     rows.sort(key=lambda c: c.claim_start_dt)
     total = len(rows)
     start = (page - 1) * per_page
@@ -1085,6 +1098,108 @@ def explain_provider_get(provider_id: str):
         status_code=405,
         detail="Use POST /provider/{provider_id}/explain to generate an investigation narrative.",
     )
+
+
+# ── Claim scoring endpoints ───────────────────────────────────────────────────
+
+# Lazy-loaded claim data (populated on first call to /claims/* endpoints)
+_SCORED_CLAIMS: list[dict] | None = None       # top-100 list
+_CLAIM_INDEX: dict[str, dict] | None = None    # claim_id → compact record
+
+
+def _load_claim_data() -> tuple[list[dict], dict[str, dict]]:
+    global _SCORED_CLAIMS, _CLAIM_INDEX
+    if _SCORED_CLAIMS is not None and _CLAIM_INDEX is not None:
+        return _SCORED_CLAIMS, _CLAIM_INDEX
+
+    top_path = OUTPUTS / "scored_claims.json"
+    idx_path = OUTPUTS / "claim_score_index.json"
+
+    if not top_path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "scored_claims.json not found. "
+                "Run: python -m src.claim_scorer to generate it."
+            ),
+        )
+
+    with open(top_path, encoding="utf-8") as f:
+        _SCORED_CLAIMS = json.load(f)
+
+    _CLAIM_INDEX = {}
+    if idx_path.exists():
+        with open(idx_path, encoding="utf-8") as f:
+            _CLAIM_INDEX = json.load(f)
+
+    return _SCORED_CLAIMS, _CLAIM_INDEX
+
+
+class ScoredClaimResponse(BaseModel):
+    claim_id: str
+    provider_id: str
+    bene_id: str
+    claim_start_dt: Optional[str]
+    claim_end_dt: Optional[str]
+    claim_type: str
+    amount_reimbursed: float
+    deductible_paid: float
+    attending_physician: Optional[str]
+    diagnosis_codes: list[str]
+    procedure_codes: list[str]
+    admission_dt: Optional[str]
+    discharge_dt: Optional[str]
+    rule_flags: list[str]
+    rule_score: float
+    within_z: float
+    cross_z: float
+    claim_risk_score: float
+    claim_risk_tier: str
+    narrative: Optional[str] = None
+
+
+@app.get(
+    "/claims/top",
+    response_model=list[ScoredClaimResponse],
+    summary="Top N claims by claim_risk_score × amount",
+)
+def get_top_claims(limit: int = Query(100, ge=1, le=100)):
+    """Return the top-N highest-risk claims pre-scored by the claim-level pipeline.
+
+    Requires outputs/scored_claims.json — run `python -m src.claim_scorer` first.
+    """
+    top, _ = _load_claim_data()
+    return top[:limit]
+
+
+@app.get(
+    "/claims/{claim_id}",
+    response_model=ScoredClaimResponse,
+    summary="Single claim with optional LLM narrative",
+)
+def get_claim(claim_id: str, narrate: bool = Query(False, description="Generate LLM narrative for high/medium claims")):
+    """Return a single scored claim by ID. Set narrate=true to attach an LLM narrative."""
+    top, index = _load_claim_data()
+
+    # Search top-100 first
+    record: dict | None = next((r for r in top if r["claim_id"] == claim_id), None)
+
+    if record is None:
+        # Fall back to index for compact record
+        if claim_id not in index:
+            raise HTTPException(status_code=404, detail=f"Claim '{claim_id}' not found in scored claims.")
+        # Index only has summary fields — can't return full record
+        raise HTTPException(
+            status_code=404,
+            detail=f"Claim '{claim_id}' was scored but is not in the top-100 detail list.",
+        )
+
+    result = dict(record)
+    if narrate and record.get("claim_risk_tier") in ("high", "medium"):
+        from src.narrator import narrate_claim
+        result["narrative"] = narrate_claim(record)
+
+    return result
 
 
 # ── Chat assistant endpoint ───────────────────────────────────────────────────

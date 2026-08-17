@@ -242,6 +242,88 @@ def narrate_case(provider: ScoredProvider) -> Optional[str]:
     return result
 
 
+_CLAIM_NARRATIVES_PATH = OUTPUTS / "claim_narratives.json"
+_claim_narrative_cache: dict[str, str] | None = None
+
+_SYSTEM_CLAIM = (
+    "You are explaining a suspicious Medicare claim to a panel of reviewers who are not medical experts. "
+    "Use short sentences and everyday words.\n\n"
+    "You will receive a claim record with rule violations and billing amounts. "
+    "Write exactly one short paragraph (under 120 words) that:\n"
+    "1. States which rule(s) fired and what they mean in plain English.\n"
+    "2. Notes the dollar amount and why the combination is concerning.\n"
+    "3. Suggests one specific thing the reviewer should check.\n\n"
+    "Rules you must follow:\n"
+    "- Never say the provider committed fraud — describe what the records show.\n"
+    "- Never mention a score, probability, or numeric risk tier.\n"
+    "- Use concrete numbers from the claim (dates, amounts).\n"
+    "- If a policy citation is provided, mention it by name.\n"
+    "- Keep under 120 words."
+)
+
+
+def _load_claim_cache() -> dict[str, str]:
+    global _claim_narrative_cache
+    if _claim_narrative_cache is None:
+        if _CLAIM_NARRATIVES_PATH.exists():
+            with open(_CLAIM_NARRATIVES_PATH, encoding="utf-8") as f:
+                _claim_narrative_cache = json.load(f)
+        else:
+            _claim_narrative_cache = {}
+    return _claim_narrative_cache
+
+
+def _save_claim_cache() -> None:
+    with open(_CLAIM_NARRATIVES_PATH, "w", encoding="utf-8") as f:
+        json.dump(_claim_narrative_cache, f, indent=2, ensure_ascii=False)
+
+
+def narrate_claim(claim_record: dict) -> Optional[str]:
+    """Generate a one-paragraph narrative for a high or medium tier claim.
+
+    claim_record must include: claim_id, claim_type, claim_start_dt, claim_end_dt,
+    amount_reimbursed, rule_flags, rule_score, claim_risk_tier.
+
+    Cached to outputs/claim_narratives.json. Returns None if Groq is unavailable.
+    Only call for high or medium tier claims.
+    """
+    claim_id = claim_record.get("claim_id", "")
+    cache = _load_claim_cache()
+    if claim_id in cache:
+        return cache[claim_id]
+
+    # Build a concise user prompt from the claim record
+    rule_flags = claim_record.get("rule_flags", [])
+    if not rule_flags:
+        return None  # no rules fired — narrative not needed
+
+    from src.claim_scorer import RULES
+    rule_details = {r["id"]: r for r in RULES}
+
+    lines = [
+        f"Claim ID: {claim_id}",
+        f"Claim type: {claim_record.get('claim_type', 'unknown')}",
+        f"Service dates: {claim_record.get('claim_start_dt')} to {claim_record.get('claim_end_dt')}",
+        f"Amount reimbursed: ${claim_record.get('amount_reimbursed', 0):,.2f}",
+        "",
+        "Rule violations:",
+    ]
+    for flag in rule_flags:
+        rd = rule_details.get(flag, {})
+        citation = rd.get("citation", "")
+        lines.append(f"  [{flag}] {citation}")
+
+    if claim_record.get("admission_dt"):
+        lines.append(f"Admission: {claim_record['admission_dt']}, Discharge: {claim_record.get('discharge_dt')}")
+
+    prompt = "\n".join(lines)
+    result = _call_groq(_SYSTEM_CLAIM, prompt, _MODEL_MEDIUM)
+    if result:
+        cache[claim_id] = result
+        _save_claim_cache()
+    return result
+
+
 def narrate_clearance(provider: ScoredProvider) -> Optional[str]:
     """Generate a one-paragraph clearance narrative for a non-flagged provider.
 
