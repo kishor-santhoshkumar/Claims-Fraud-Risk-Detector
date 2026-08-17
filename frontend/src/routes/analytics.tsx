@@ -158,7 +158,19 @@ function Analytics() {
         <Panel title="Risk tier distribution">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={tiers} dataKey="value" nameKey="name" innerRadius={55} outerRadius={88} paddingAngle={3} stroke="none">
+              <Pie
+                data={tiers}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={55}
+                outerRadius={88}
+                paddingAngle={3}
+                stroke="none"
+                label={({ name, percent }) =>
+                  percent > 0.03 ? `${(percent * 100).toFixed(1)}%` : ""
+                }
+                labelLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
+              >
                 {tiers.map((_, i) => <Cell key={i} fill={[HIGH, MEDIUM, LOW][i]} />)}
               </Pie>
               <Tooltip formatter={(v: number, name: string) => [v.toLocaleString(), name]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
