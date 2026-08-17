@@ -5,6 +5,37 @@ import { useCaseStore } from "@/lib/caseStore";
 import { formatMoneyFull } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 
+// Population stats baked in from outputs/claim_pop_stats.json
+const POP_MEDIAN = 80;
+const POP_MAD    = 60;
+const P99        = 0.4464;
+const P95        = 0.3923;
+
+const RULE_WEIGHTS: Record<string, number> = {
+  POST_DEATH_CLAIM: 0.40, DUPLICATE_CLAIM: 0.35, DISCHARGE_BEFORE_ADMIT: 0.30,
+  SHORT_STAY_HIGH_COST: 0.25, MISSING_ATTENDING: 0.20, SAME_DAY_MULTI_PROVIDER: 0.20,
+};
+
+function sig(x: number) { const c = Math.max(-15, Math.min(15, x)); return 1 / (1 + Math.exp(-c)); }
+
+function scoreClaimInline(claim: Claim, allAmounts: number[]): Claim {
+  if (claim.claim_risk_tier != null) return claim; // already scored by backend
+  const flags = claim.rule_flags?.length ? claim.rule_flags : (claim.rule_flag ? [claim.rule_flag] : []);
+  const ruleScore = Math.min(flags.reduce((s, f) => s + (RULE_WEIGHTS[f] ?? 0), 0), 1.0);
+  const amt = claim.amount_reimbursed;
+  const n = allAmounts.length;
+  let wz = 0;
+  if (n > 1) {
+    const mean = allAmounts.reduce((a, b) => a + b, 0) / n;
+    const std = Math.sqrt(allAmounts.reduce((s, x) => s + (x - mean) ** 2, 0) / (n - 1));
+    wz = std > 0 ? (amt - mean) / std : 0;
+  }
+  const cz = POP_MAD > 0 ? (amt - POP_MEDIAN) / (1.4826 * POP_MAD) : 0;
+  const score = Math.round(Math.max(0, Math.min(1, 0.5 * ruleScore + 0.3 * sig(wz / 3) + 0.2 * sig(cz / 3))) * 10000) / 10000;
+  const tier: "high" | "medium" | "low" = score >= P99 ? "high" : score >= P95 ? "medium" : "low";
+  return { ...claim, claim_risk_score: score, claim_risk_tier: tier, within_z: Math.round(wz * 10000) / 10000, cross_z: Math.round(cz * 10000) / 10000, rule_flags: flags };
+}
+
 export const Route = createFileRoute("/claims/$providerId")({
   component: ClaimsPage,
 });
@@ -166,7 +197,8 @@ function ClaimsPage() {
     setPage(1);
     fetchClaims(providerId, 1, PER_PAGE)
       .then((res) => {
-        setClaims(res.claims);
+        const amounts = res.claims.map((c) => c.amount_reimbursed);
+        setClaims(res.claims.map((c) => scoreClaimInline(c, amounts)));
         setTotalClaims(res.total_claims);
       })
       .catch((err: Error) => setError(err.message))
@@ -178,7 +210,10 @@ function ClaimsPage() {
     setLoadingMore(true);
     fetchClaims(providerId, nextPage, PER_PAGE)
       .then((res) => {
-        setClaims((prev) => [...prev, ...res.claims]);
+        setClaims((prev) => {
+          const allAmounts = [...prev, ...res.claims].map((c) => c.amount_reimbursed);
+          return [...prev, ...res.claims.map((c) => scoreClaimInline(c, allAmounts))];
+        });
         setPage(nextPage);
       })
       .finally(() => setLoadingMore(false));
