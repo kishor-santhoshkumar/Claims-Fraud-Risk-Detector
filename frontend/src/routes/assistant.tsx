@@ -113,11 +113,28 @@ function Assistant() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
-      <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Case assistant</h1>
-        <p style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)", marginBottom: 0 }}>
-          Ask general questions or tag a provider with @PRVXXXXX to get evidence-grounded answers
-        </p>
+      <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Case assistant</h1>
+          <p style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)", marginBottom: 0 }}>
+            Ask general questions or tag a provider with @PRVXXXXX to get evidence-grounded answers
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setMessages([INITIAL_MSG]);
+            setSessionProviders([]);
+            try {
+              sessionStorage.removeItem("chat_messages");
+              sessionStorage.removeItem("chat_session_providers");
+            } catch {}
+          }}
+          style={{ height: 34, padding: "0 14px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.07)", color: "#dc2626", fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, border-color 0.15s", whiteSpace: "nowrap" }}
+          onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(239,68,68,0.15)"; b.style.borderColor = "rgba(239,68,68,0.6)"; }}
+          onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(239,68,68,0.07)"; b.style.borderColor = "rgba(239,68,68,0.35)"; }}
+        >
+          Clear chat
+        </button>
       </header>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
