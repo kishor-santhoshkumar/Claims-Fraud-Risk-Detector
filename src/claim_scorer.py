@@ -237,7 +237,13 @@ def _cross_provider_z(claims: pd.DataFrame) -> pd.Series:
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 def _score_claims(claims: pd.DataFrame) -> pd.DataFrame:
-    """Add claim_risk_score and risk_tier to the claims dataframe."""
+    """Add claim_risk_score and percentile-based claim_risk_tier to the claims dataframe.
+
+    Tiers are assigned from the actual score distribution:
+      high   — top 1%  of all claims by claim_risk_score (p99+)
+      medium — next 4% (p95 to p99)
+      low    — everything below p95
+    """
     within_z = _within_provider_z(claims)
     cross_z = _cross_provider_z(claims)
 
@@ -255,23 +261,27 @@ def _score_claims(claims: pd.DataFrame) -> pd.DataFrame:
     claims["cross_z"] = cross_z.round(4)
     claims["claim_risk_score"] = score.round(4)
 
-    def _tier(row: pd.Series) -> str:
-        rs = row["rule_score"]
-        crs = row["claim_risk_score"]
-        if rs > 0 and crs >= 0.5:
+    # Percentile thresholds from the actual population
+    p99 = float(np.percentile(score.values, 99))
+    p95 = float(np.percentile(score.values, 95))
+    claims["_p99"] = p99
+    claims["_p95"] = p95
+
+    def _tier(crs: float) -> str:
+        if crs >= p99:
             return "high"
-        if rs > 0 or crs >= 0.3:
+        if crs >= p95:
             return "medium"
         return "low"
 
-    claims["claim_risk_tier"] = claims.apply(_tier, axis=1)
+    claims["claim_risk_tier"] = score.map(_tier)
     return claims
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
 def _validate(claims: pd.DataFrame) -> None:
-    """Halt if any rule fires on ≥10% of claims or within_z is non-finite."""
+    """Halt on bad rule rates, non-finite z, or high tier exceeding 2%."""
     n = len(claims)
     for rule_id in RULE_WEIGHTS:
         fired = claims["rule_flags"].apply(lambda fl: rule_id in fl).sum()
@@ -286,7 +296,25 @@ def _validate(claims: pd.DataFrame) -> None:
     if bad_z > 0:
         raise RuntimeError(f"Validation failed: within_z is non-finite for {bad_z} claims.")
 
+    high_n = (claims["claim_risk_tier"] == "high").sum()
+    high_pct = 100 * high_n / n if n else 0
+    if high_pct > 2.0:
+        raise RuntimeError(
+            f"Tier gate failed: high-risk tier is {high_pct:.2f}% ({high_n:,} claims). "
+            "Expected <= 2%. Thresholds are too loose — investigate before shipping."
+        )
+
+    p99 = claims["_p99"].iloc[0]
+    p95 = claims["_p95"].iloc[0]
+    med_n  = (claims["claim_risk_tier"] == "medium").sum()
+    low_n  = (claims["claim_risk_tier"] == "low").sum()
+
     print(f"[claim_scorer] Validation passed — {n:,} claims scored.")
+    print(f"  Score thresholds: p99={p99:.4f} (high), p95={p95:.4f} (medium)")
+    print(f"  High:   {high_n:,} ({high_pct:.2f}%)")
+    print(f"  Medium: {med_n:,} ({100*med_n/n:.2f}%)")
+    print(f"  Low:    {low_n:,} ({100*low_n/n:.2f}%)")
+    print()
     for rule_id in RULE_WEIGHTS:
         fired = claims["rule_flags"].apply(lambda fl: rule_id in fl).sum()
         print(f"  {rule_id}: {fired:,} claims ({100 * fired / n:.2f}%)")
@@ -375,46 +403,70 @@ def score_all_claims() -> pd.DataFrame:
 
 
 def write_outputs(claims: pd.DataFrame) -> None:
-    """Write scored_claims.json (top 100) and claim_score_index.json."""
+    """Write scored_claims.json (top 500) and claim_score_index.json."""
     OUTPUTS.mkdir(exist_ok=True)
 
-    # Top 100 by claim_risk_score × amount_reimbursed
     claims = claims.copy()
     claims["_rank_key"] = claims["claim_risk_score"] * claims["InscClaimAmtReimbursed"]
-    top100 = claims.nlargest(100, "_rank_key")
+    top500 = claims.nlargest(500, "_rank_key")
 
-    records = [_row_to_record(row) for _, row in top100.iterrows()]
+    records = [_row_to_record(row) for _, row in top500.iterrows()]
     with open(OUTPUTS / "scored_claims.json", "w", encoding="utf-8") as f:
         json.dump(records, f, indent=2, ensure_ascii=False)
     print(f"[claim_scorer] Wrote {len(records)} claims -> outputs/scored_claims.json")
 
-    # Compact index — all non-low-tier claims (claim_id → {score, tier, provider_id, amount})
+    # Compact index — all non-low-tier claims; includes within_z and cross_z for the UI
     flagged = claims[claims["claim_risk_tier"] != "low"]
     index: dict[str, dict] = {}
     for _, row in flagged.iterrows():
         index[str(row["ClaimID"])] = {
-            "provider_id":      str(row["Provider"]),
-            "claim_risk_score": float(row["claim_risk_score"]),
-            "claim_risk_tier":  str(row["claim_risk_tier"]),
+            "provider_id":       str(row["Provider"]),
+            "claim_risk_score":  round(float(row["claim_risk_score"]), 4),
+            "claim_risk_tier":   str(row["claim_risk_tier"]),
             "amount_reimbursed": float(row["InscClaimAmtReimbursed"]),
-            "rule_flags":       row["rule_flags"],
+            "rule_flags":        row["rule_flags"],
+            "within_z":          round(float(row["within_z"]), 4),
+            "cross_z":           round(float(row["cross_z"]), 4),
         }
     with open(OUTPUTS / "claim_score_index.json", "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False)
     print(f"[claim_scorer] Wrote {len(index):,} flagged claims -> outputs/claim_score_index.json")
 
-    # Print verification table
-    print("\n[claim_scorer] Top 10 by risk×amount:")
-    print(f"{'ClaimID':<22} {'Provider':<12} {'Tier':<8} {'Score':>6} {'Amount':>10} {'Flags'}")
-    print("-" * 80)
+    # Verification table - top 10 by rank key
+    print("\n[claim_scorer] Top 10 by risk x amount:")
+    print(f"{'ClaimID':<22} {'Provider':<12} {'Tier':<8} {'Score':>6} {'Amount':>10}  Flags")
+    print("-" * 82)
     for r in records[:10]:
-        flags = ", ".join(r["rule_flags"]) if r["rule_flags"] else "—"
+        flags = ", ".join(r["rule_flags"]) if r["rule_flags"] else "-"
         print(
             f"{r['claim_id']:<22} {r['provider_id']:<12} {r['claim_risk_tier']:<8} "
             f"{r['claim_risk_score']:>6.3f} {r['amount_reimbursed']:>10,.0f}  {flags}"
         )
 
+    # Demo-provider distribution
+    demo_ids = ["PRV52985", "PRV51005", "PRV52019", "PRV54742"]
+    print("\n[claim_scorer] Demo-provider tier distribution:")
+    print(f"{'Provider':<12} {'Total':>6} {'High':>6} {'Medium':>8} {'Low':>6}")
+    print("-" * 42)
+    for pid in demo_ids:
+        sub = claims[claims["Provider"] == pid]
+        if sub.empty:
+            print(f"{pid:<12}   not found")
+            continue
+        h = (sub["claim_risk_tier"] == "high").sum()
+        m = (sub["claim_risk_tier"] == "medium").sum()
+        lo = (sub["claim_risk_tier"] == "low").sum()
+        print(f"{pid:<12} {len(sub):>6} {h:>6} {m:>8} {lo:>6}")
+
 
 if __name__ == "__main__":
     claims = score_all_claims()
     write_outputs(claims)
+    n = len(claims)
+    h = (claims["claim_risk_tier"] == "high").sum()
+    m = (claims["claim_risk_tier"] == "medium").sum()
+    lo = (claims["claim_risk_tier"] == "low").sum()
+    print(f"\n[claim_scorer] Full distribution across {n:,} claims:")
+    print(f"  High:   {h:,} ({100*h/n:.2f}%)")
+    print(f"  Medium: {m:,} ({100*m/n:.2f}%)")
+    print(f"  Low:    {lo:,} ({100*lo/n:.2f}%)")

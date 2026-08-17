@@ -9,12 +9,136 @@ export const Route = createFileRoute("/claims/$providerId")({
   component: ClaimsPage,
 });
 
-type SortKey = keyof Pick<
-  Claim,
-  "claim_id" | "claim_start_dt" | "claim_type" | "amount_reimbursed" | "deductible_paid" | "attending_physician"
->;
+type SortKey =
+  | "claim_risk_score"
+  | "claim_id"
+  | "claim_start_dt"
+  | "claim_type"
+  | "amount_reimbursed"
+  | "deductible_paid"
+  | "attending_physician";
 
 const PER_PAGE = 200;
+
+const RULE_META: Record<string, { label: string; severity: string; citation: string }> = {
+  POST_DEATH_CLAIM:       { label: "Post-death billing",        severity: "high",   citation: "Medicare BPM Ch.15 §15.1" },
+  DUPLICATE_CLAIM:        { label: "Duplicate claim",           severity: "high",   citation: "Medicare PIM Ch.4 §4.3.1" },
+  DISCHARGE_BEFORE_ADMIT: { label: "Discharge before admit",    severity: "medium", citation: "Medicare PIM Ch.3 §3.2.4" },
+  SHORT_STAY_HIGH_COST:   { label: "Short stay / high cost",    severity: "medium", citation: "Medicare PIM Ch.6 §6.5.2" },
+  MISSING_ATTENDING:      { label: "Missing attending physician",severity: "medium", citation: "42 CFR §424.22" },
+  SAME_DAY_MULTI_PROVIDER:{ label: "Same-day multi-provider",   severity: "low",    citation: "Medicare PIM Ch.4 §4.5" },
+};
+
+const SEVERITY_COLORS: Record<string, string> = {
+  high:   "#dc2626",
+  medium: "#d97706",
+  low:    "#6b7280",
+};
+
+function TierBadge({ tier }: { tier: "high" | "medium" | "low" | null }) {
+  if (!tier || tier === "low") return null;
+  const styles: Record<string, React.CSSProperties> = {
+    high:   { background: "rgba(220,38,38,0.12)", color: "#dc2626", border: "1px solid rgba(220,38,38,0.35)" },
+    medium: { background: "rgba(217,119,6,0.12)",  color: "#d97706", border: "1px solid rgba(217,119,6,0.35)" },
+  };
+  return (
+    <span style={{
+      ...styles[tier],
+      display: "inline-block",
+      padding: "1px 6px",
+      borderRadius: 4,
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      textTransform: "uppercase",
+      marginLeft: 6,
+      verticalAlign: "middle",
+    }}>
+      {tier}
+    </span>
+  );
+}
+
+function rowTint(tier: "high" | "medium" | "low" | null): React.CSSProperties {
+  if (tier === "high")   return { background: "rgba(220,38,38,0.05)" };
+  if (tier === "medium") return { background: "rgba(217,119,6,0.05)" };
+  return {};
+}
+
+function WhyFlagged({ claim }: { claim: Claim }) {
+  const flags = claim.rule_flags ?? [];
+  const hasFlags = flags.length > 0;
+  const hasZ = (claim.within_z != null && Math.abs(claim.within_z) > 0.5) ||
+               (claim.cross_z  != null && Math.abs(claim.cross_z)  > 0.5);
+
+  if (!hasFlags && !hasZ) return null;
+
+  return (
+    <div style={{
+      marginTop: 12,
+      padding: "10px 12px",
+      background: "rgba(220,38,38,0.04)",
+      border: "1px solid rgba(220,38,38,0.18)",
+      borderRadius: 6,
+    }}>
+      <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#dc2626", marginBottom: 8 }}>
+        Why flagged
+      </p>
+      {hasFlags && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: hasZ ? 8 : 0 }}>
+          {flags.map((flag) => {
+            const meta = RULE_META[flag] ?? { label: flag, severity: "medium", citation: "" };
+            return (
+              <div key={flag} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 12 }}>
+                <span style={{
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: SEVERITY_COLORS[meta.severity] + "20",
+                  color: SEVERITY_COLORS[meta.severity],
+                  border: `1px solid ${SEVERITY_COLORS[meta.severity]}40`,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}>
+                  {meta.severity.toUpperCase()}
+                </span>
+                <span style={{ color: "var(--text-secondary)" }}>
+                  {meta.label}
+                  {meta.citation && (
+                    <span style={{ color: "var(--text-faint)", marginLeft: 4 }}>({meta.citation})</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {hasZ && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px", fontSize: 12, color: "var(--text-secondary)" }}>
+          {claim.within_z != null && (
+            <div>
+              <span style={{ color: "var(--text-faint)" }}>Within-provider z </span>
+              <span style={{ fontFamily: "ui-monospace,monospace", fontWeight: 600, color: Math.abs(claim.within_z) > 2 ? "#dc2626" : "inherit" }}>
+                {claim.within_z > 0 ? "+" : ""}{claim.within_z.toFixed(2)}
+              </span>
+              <span style={{ color: "var(--text-faint)", marginLeft: 4 }}>(vs this provider's mean)</span>
+            </div>
+          )}
+          {claim.cross_z != null && (
+            <div>
+              <span style={{ color: "var(--text-faint)" }}>Cross-provider z </span>
+              <span style={{ fontFamily: "ui-monospace,monospace", fontWeight: 600, color: Math.abs(claim.cross_z) > 2 ? "#dc2626" : "inherit" }}>
+                {claim.cross_z > 0 ? "+" : ""}{claim.cross_z.toFixed(2)}
+              </span>
+              <span style={{ color: "var(--text-faint)", marginLeft: 4 }}>(vs all-provider median)</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ClaimsPage() {
   const { providerId } = Route.useParams();
@@ -29,9 +153,10 @@ function ClaimsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [type, setType] = useState<"all" | "inpatient" | "outpatient">("all");
+  const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium">("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "claim_start_dt", dir: 1 });
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "claim_risk_score", dir: -1 });
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,20 +186,30 @@ function ClaimsPage() {
 
   const hasMore = claims.length < totalClaims;
 
+  const highCount   = useMemo(() => claims.filter((c) => c.claim_risk_tier === "high").length, [claims]);
+  const mediumCount = useMemo(() => claims.filter((c) => c.claim_risk_tier === "medium").length, [claims]);
+
   const rows = useMemo(() => {
     const filtered = claims.filter(
       (c) =>
         (type === "all" || c.claim_type === type) &&
+        (riskFilter === "all" || c.claim_risk_tier === riskFilter) &&
         (!from || c.claim_start_dt >= from) &&
         (!to || c.claim_start_dt <= to),
     );
     return filtered.sort((a, b) => {
-      const av = a[sort.key];
-      const bv = b[sort.key];
+      const key = sort.key;
+      if (key === "claim_risk_score") {
+        const av = a.claim_risk_score ?? -1;
+        const bv = b.claim_risk_score ?? -1;
+        return (av - bv) * sort.dir;
+      }
+      const av = (a as Record<string, unknown>)[key];
+      const bv = (b as Record<string, unknown>)[key];
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * sort.dir;
       return String(av ?? "").localeCompare(String(bv ?? "")) * sort.dir;
     });
-  }, [claims, type, from, to, sort]);
+  }, [claims, type, riskFilter, from, to, sort]);
 
   const totalReimbursed = claims.reduce((s, c) => s + c.amount_reimbursed, 0);
 
@@ -91,6 +226,21 @@ function ClaimsPage() {
     </th>
   );
 
+  const filterBtn = (value: string, label: string, active: boolean, onClick: () => void) => (
+    <button
+      key={value}
+      onClick={onClick}
+      className={cn(
+        "border px-2 py-1 capitalize",
+        active
+          ? "border-foreground/30 bg-muted"
+          : "border-transparent text-muted-foreground hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="px-6 pb-16">
       <div className="border-b border-border py-4">
@@ -103,9 +253,14 @@ function ClaimsPage() {
         </Link>
         <h1 className="mt-2 font-mono text-[18px]">{providerId}</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          {totalClaims > 0 ? totalClaims.toLocaleString() : provider?.n_claims.toLocaleString() ?? "—"} claims ·{" "}
-          showing {claims.length} ·{" "}
-          {formatMoneyFull(provider?.total_reimbursed ?? totalReimbursed)} reimbursed
+          {(totalClaims > 0 ? totalClaims : provider?.n_claims ?? 0).toLocaleString()} claims
+          {highCount > 0 && (
+            <> · <span style={{ color: "#dc2626", fontWeight: 600 }}>{highCount} high risk</span></>
+          )}
+          {mediumCount > 0 && (
+            <> · <span style={{ color: "#d97706", fontWeight: 600 }}>{mediumCount} medium risk</span></>
+          )}
+          {" · "}{formatMoneyFull(provider?.total_reimbursed ?? totalReimbursed)} reimbursed
         </p>
       </div>
 
@@ -116,22 +271,21 @@ function ClaimsPage() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-4 py-3 text-[12px]">
+            {/* Claim type filter */}
             <div className="flex gap-1">
-              {(["all", "inpatient", "outpatient"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setType(t)}
-                  className={cn(
-                    "border px-2 py-1 capitalize",
-                    type === t
-                      ? "border-foreground/30 bg-muted"
-                      : "border-transparent text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
+              {(["all", "inpatient", "outpatient"] as const).map((t) =>
+                filterBtn(t, t, type === t, () => setType(t))
+              )}
             </div>
+
+            {/* Risk tier filter */}
+            <div className="flex gap-1 border-l border-border pl-3">
+              {filterBtn("all",    "All risk", riskFilter === "all",    () => setRiskFilter("all"))}
+              {filterBtn("high",   "High",     riskFilter === "high",   () => setRiskFilter("high"))}
+              {filterBtn("medium", "Medium",   riskFilter === "medium", () => setRiskFilter("medium"))}
+            </div>
+
+            {/* Date range */}
             <label className="flex items-center gap-2 text-muted-foreground">
               From
               <input
@@ -162,7 +316,7 @@ function ClaimsPage() {
                 {header("deductible_paid", "Deductible", "right")}
                 {header("attending_physician", "Attending")}
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dx</th>
-                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Px</th>
+                {header("claim_risk_score", "Risk", "right")}
               </tr>
             </thead>
             <tbody>
@@ -170,14 +324,17 @@ function ClaimsPage() {
                 <Fragment key={c.claim_id}>
                   <tr
                     onClick={() => setExpanded(expanded === c.claim_id ? null : c.claim_id)}
-                    className={cn(
-                      "cursor-pointer border-b border-border hover:bg-muted/60",
-                      c.rule_flag && "bg-risk/5",
-                    )}
+                    style={rowTint(c.claim_risk_tier)}
+                    className={cn("cursor-pointer border-b border-border hover:brightness-95")}
                   >
                     <td className="px-3 py-2 font-mono">
                       {c.claim_id}
-                      {c.rule_flag && <span className="ml-2 text-[11px] text-risk">{c.rule_flag}</span>}
+                      {(c.rule_flags ?? []).map((flag) => (
+                        <span key={flag} className="ml-2 text-[11px] text-risk">{flag}</span>
+                      ))}
+                      {!(c.rule_flags?.length) && c.rule_flag && (
+                        <span className="ml-2 text-[11px] text-risk">{c.rule_flag}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
                       {c.claim_start_dt} → {c.claim_end_dt}
@@ -193,7 +350,13 @@ function ClaimsPage() {
                       {c.attending_physician ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{c.diagnosis_codes.length}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{c.procedure_codes.length}</td>
+                    <td className="px-3 py-2 text-right">
+                      {c.claim_risk_tier ? (
+                        <TierBadge tier={c.claim_risk_tier} />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                   </tr>
                   {expanded === c.claim_id && (
                     <tr className="border-b border-border bg-muted/40">
@@ -218,6 +381,9 @@ function ClaimsPage() {
                             <dd className="font-mono">{c.procedure_codes.join(", ") || "—"}</dd>
                           </div>
                         </dl>
+                        {(c.claim_risk_tier === "high" || c.claim_risk_tier === "medium") && (
+                          <WhyFlagged claim={c} />
+                        )}
                       </td>
                     </tr>
                   )}
@@ -228,7 +394,7 @@ function ClaimsPage() {
 
           {rows.length === 0 && !loading && (
             <p className="py-10 text-center text-[13px] text-muted-foreground">
-              Widen the date range or switch the claim type to see billing activity.
+              No claims match the current filters.
             </p>
           )}
 

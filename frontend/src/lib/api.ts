@@ -130,6 +130,11 @@ export interface Claim {
   admission_dt: string | null;
   discharge_dt: string | null;
   rule_flag: string | null;
+  rule_flags: string[];
+  claim_risk_score: number | null;
+  claim_risk_tier: "high" | "medium" | "low" | null;
+  within_z: number | null;
+  cross_z: number | null;
 }
 
 export interface ClaimsResponse {

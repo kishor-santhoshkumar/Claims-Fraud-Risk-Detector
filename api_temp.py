@@ -618,8 +618,11 @@ class ClaimRow(BaseModel):
     admission_dt: Optional[str]
     discharge_dt: Optional[str]
     rule_flag: Optional[str] = None
+    rule_flags: list[str] = []
     claim_risk_score: Optional[float] = None
     claim_risk_tier: Optional[str] = None
+    within_z: Optional[float] = None
+    cross_z: Optional[float] = None
 
 
 class ClaimsResponse(BaseModel):
@@ -980,6 +983,9 @@ def get_provider_claims(
             if entry:
                 r.claim_risk_score = entry.get("claim_risk_score")
                 r.claim_risk_tier = entry.get("claim_risk_tier")
+                r.rule_flags = entry.get("rule_flags", [])
+                r.within_z = entry.get("within_z")
+                r.cross_z = entry.get("cross_z")
     except HTTPException:
         pass  # scored_claims.json not yet generated — scores stay null
 
