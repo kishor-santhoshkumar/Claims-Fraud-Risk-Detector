@@ -60,7 +60,7 @@ function SectionCard({
         <div style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}18`, border: `1px solid ${accent}30` }}>
           <Icon size={15} style={{ color: accent }} />
         </div>
-        <h2 style={{ fontSize: 14, fontWeight: 700, color: "#161b2e", margin: 0 }}>{title}</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{title}</h2>
       </div>
       {children}
     </div>
@@ -85,8 +85,8 @@ function SettingRow({
       borderBottom: last ? "none" : "1px solid rgba(30,41,59,0.06)",
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 500, color: "#232a41", margin: 0 }}>{label}</p>
-        {desc && <p style={{ fontSize: 11, color: "#8791a8", margin: "2px 0 0", lineHeight: 1.4 }}>{desc}</p>}
+        <p style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", margin: 0 }}>{label}</p>
+        {desc && <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "2px 0 0", lineHeight: 1.4 }}>{desc}</p>}
       </div>
       <div style={{ flexShrink: 0 }}>{children}</div>
     </div>
@@ -115,7 +115,7 @@ function ChipGroup<T extends string>({
               fontFamily: "inherit", cursor: "pointer",
               border: active ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(100,116,139,0.22)",
               background: active ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.5)",
-              color: active ? "#1d4ed8" : "#667088",
+              color: active ? "#1d4ed8" : "var(--text-muted)",
               transition: "background 0.15s, color 0.15s, border-color 0.15s",
             }}
           >
@@ -159,27 +159,12 @@ function Settings() {
   };
 
   return (
-    <div style={{ padding: "28px 28px 72px", maxWidth: 700, overflowY: "auto" }}>
+    <div style={{ padding: "28px 28px 72px", maxWidth: 700 }}>
       {/* Page header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: "#161b2e", margin: 0, letterSpacing: "-0.01em" }}>Settings</h1>
-        <p style={{ marginTop: 5, fontSize: 13, color: "#8791a8", marginBottom: 0 }}>Customize your fraud review workspace</p>
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.01em" }}>Settings</h1>
+        <p style={{ marginTop: 5, fontSize: 13, color: "var(--text-faint)", marginBottom: 0 }}>Customize your fraud review workspace</p>
       </div>
-
-      {/* ── Appearance ───────────────────────────────────────────────── */}
-      <SectionCard icon={darkMode ? Moon : Sun} title="Appearance" accent="#6366f1">
-        <SettingRow
-          label="Dark mode"
-          desc="Switch between light and dark interface"
-          last
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Sun size={14} style={{ color: darkMode ? "#8791a8" : "#f59e0b", transition: "color 0.2s" }} />
-            <Toggle on={darkMode} onChange={setDarkMode} />
-            <Moon size={14} style={{ color: darkMode ? "#6366f1" : "#8791a8", transition: "color 0.2s" }} />
-          </div>
-        </SettingRow>
-      </SectionCard>
 
       {/* ── Notifications ────────────────────────────────────────────── */}
       <SectionCard icon={Bell} title="Notifications" accent="#f59e0b">
@@ -223,6 +208,17 @@ function Settings() {
 
       {/* ── Display ──────────────────────────────────────────────────── */}
       <SectionCard icon={Monitor} title="Display" accent="#3b82f6">
+        {/* Dark / Light mode inside Display */}
+        <SettingRow
+          label="Dark mode"
+          desc="Switch between light and dark interface"
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Sun size={14} style={{ color: darkMode ? "var(--text-faint)" : "#f59e0b", transition: "color 0.2s" }} />
+            <Toggle on={darkMode} onChange={setDarkMode} />
+            <Moon size={14} style={{ color: darkMode ? "#6366f1" : "var(--text-faint)", transition: "color 0.2s" }} />
+          </div>
+        </SettingRow>
         <SettingRow
           label="Theme"
           desc="Colour accent for the interface"
@@ -257,12 +253,12 @@ function Settings() {
       {/* ── Model Configuration ──────────────────────────────────────── */}
       <SectionCard icon={DatabaseZap} title="Model Configuration" accent="#8b5cf6">
         {[
-          { label: "Model version",      value: "v1.0" },
-          { label: "Features",           value: "31" },
-          { label: "Review threshold",   value: "Score ≥ 0.50 (high) · ≥ 0.15 (medium)" },
-          { label: "Scoring run",        value: "14 Aug 2026" },
-          { label: "Deterministic rules",value: "12" },
-          { label: "Data source",        value: "Kaggle — Medicare Provider Fraud Detection" },
+          { label: "Model version",       value: "v1.0" },
+          { label: "Features",            value: "31" },
+          { label: "Review threshold",    value: "Score ≥ 0.50 (high) · ≥ 0.15 (medium)" },
+          { label: "Scoring run",         value: "14 Aug 2026" },
+          { label: "Deterministic rules", value: "12" },
+          { label: "Data source",         value: "Kaggle — Medicare Provider Fraud Detection" },
         ].map((r, i, arr) => (
           <div
             key={r.label}
@@ -272,21 +268,21 @@ function Settings() {
               borderBottom: i === arr.length - 1 ? "none" : "1px solid rgba(30,41,59,0.06)",
             }}
           >
-            <span style={{ color: "#8791a8", fontWeight: 500 }}>{r.label}</span>
-            <span style={{ fontFamily: "ui-monospace, monospace", color: "#232a41", fontSize: 12 }}>{r.value}</span>
+            <span style={{ color: "var(--text-faint)", fontWeight: 500 }}>{r.label}</span>
+            <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--text-secondary)", fontSize: 12 }}>{r.value}</span>
           </div>
         ))}
 
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(30,41,59,0.07)" }}>
-          <p style={{ fontSize: 13, color: "#667088", marginBottom: 12 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
             {counts.reviewed} decision{counts.reviewed !== 1 ? "s" : ""} this session —{" "}
             {counts.confirmed} confirmed, {counts.cleared} cleared, {counts.needsInfo} needs info.
           </p>
           <button
             onClick={() => { reset(); toast("Session decisions reset"); }}
-            style={{ height: 36, padding: "0 16px", borderRadius: 9, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.6)", color: "#47516b", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, color 0.15s, border-color 0.15s" }}
+            style={{ height: 36, padding: "0 16px", borderRadius: 9, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.6)", color: "var(--text-muted)", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, color 0.15s, border-color 0.15s" }}
             onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(239,68,68,0.08)"; b.style.borderColor = "rgba(239,68,68,0.25)"; b.style.color = "#dc2626"; }}
-            onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.6)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "#47516b"; }}
+            onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.6)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "var(--text-muted)"; }}
           >
             Reset session decisions
           </button>
@@ -297,8 +293,8 @@ function Settings() {
       <SectionCard icon={LogOut} title="Account" accent="#ef4444">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0" }}>
           <div>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#161b2e", margin: 0 }}>CodeCrafters</p>
-            <p style={{ fontSize: 12, color: "#8791a8", margin: "3px 0 0" }}>Model v1.0 · 31 features · 5,410 providers</p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>CodeCrafters</p>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "3px 0 0" }}>Model v1.0 · 31 features · 5,410 providers</p>
           </div>
           <button
             onClick={handleLogout}

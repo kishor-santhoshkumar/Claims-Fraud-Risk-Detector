@@ -43,7 +43,7 @@ export function AppSidebar() {
         <div style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 4px 14px rgba(59,130,246,0.35)" }}>
           <ShieldCheck size={15} color="#fff" strokeWidth={2} />
         </div>
-        <span className="hidden md:inline" style={{ fontSize: 12.5, fontWeight: 600, color: "#161b2e", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span className="hidden md:inline" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           Payment Integrity
         </span>
       </div>
@@ -68,11 +68,11 @@ export function AppSidebar() {
                 fontWeight: 500,
                 borderLeft: active ? "3px solid #3b82f6" : "3px solid transparent",
                 background: active ? "rgba(59,130,246,0.14)" : "transparent",
-                color: active ? "#1d4ed8" : "#667088",
+                color: active ? "#1d4ed8" : "var(--text-muted)",
                 transition: "background 0.15s, color 0.15s, border-color 0.15s",
               }}
-              onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.55)"; (e.currentTarget as HTMLAnchorElement).style.color = "#161b2e"; } }}
-              onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = "#667088"; } }}
+              onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.55)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-primary)"; } }}
+              onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-muted)"; } }}
             >
               <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? "#2563eb" : undefined }} />
               <span className="hidden md:inline">{label}</span>
@@ -89,15 +89,15 @@ export function AppSidebar() {
             CC
           </div>
           <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#161b2e", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>CodeCrafters</span>
-            <span style={{ fontSize: 11, color: "#8791a8" }}>v1.0 · 31 features</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>CodeCrafters</span>
+            <span style={{ fontSize: 11, color: "var(--text-faint)" }}>v1.0 · 31 features</span>
           </div>
         </div>
         <button
           onClick={handleLogout}
-          style={{ display: "flex", alignItems: "center", gap: 10, height: 38, padding: "0 12px", borderRadius: 10, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.5)", color: "#667088", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, color 0.15s, border-color 0.15s", width: "100%", justifyContent: "center" }}
+          style={{ display: "flex", alignItems: "center", gap: 10, height: 38, padding: "0 12px", borderRadius: 10, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.5)", color: "var(--text-muted)", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, color 0.15s, border-color 0.15s", width: "100%", justifyContent: "center" }}
           onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(239,68,68,0.1)"; b.style.borderColor = "rgba(239,68,68,0.3)"; b.style.color = "#dc2626"; }}
-          onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.5)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "#667088"; }}
+          onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.5)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "var(--text-muted)"; }}
         >
           <LogOut size={16} strokeWidth={1.75} style={{ flexShrink: 0 }} />
           <span className="hidden md:inline">Sign out</span>

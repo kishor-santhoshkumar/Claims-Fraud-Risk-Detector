@@ -53,7 +53,7 @@ function Dashboard() {
   if (loading) {
     return (
       <div style={{ display: "flex", height: "100svh", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ fontSize: 14, color: "#667088" }}>Loading dashboard…</p>
+        <p style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading dashboard…</p>
       </div>
     );
   }
@@ -62,7 +62,7 @@ function Dashboard() {
     return (
       <div style={{ display: "flex", height: "100svh", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
         <p style={{ fontSize: 14, color: "#dc2626" }}>Failed to load: {error}</p>
-        <p style={{ fontSize: 12, color: "#667088" }}>Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code></p>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code></p>
       </div>
     );
   }
@@ -110,8 +110,8 @@ function Dashboard() {
     <div style={{ padding: "28px 28px 56px", display: "flex", flexDirection: "column", gap: 28, overflowY: "auto", height: "100svh", boxSizing: "border-box" }}>
       {/* Page header */}
       <div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: "#161b2e", margin: 0, letterSpacing: "-0.02em" }}>Dashboard</h1>
-        <p style={{ fontSize: 13, color: "#8791a8", margin: "5px 0 0" }}>Medicare provider fraud risk · Model v1.0 · 31 features</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.02em" }}>Dashboard</h1>
+        <p style={{ fontSize: 13, color: "var(--text-faint)", margin: "5px 0 0" }}>Medicare provider fraud risk · Model v1.0 · 31 features</p>
       </div>
 
       {/* Stat cards */}
@@ -132,13 +132,13 @@ function Dashboard() {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.09em", color: "#8791a8", margin: 0 }}>{s.label}</p>
+                <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-faint)", margin: 0 }}>{s.label}</p>
                 <div style={{ width: 34, height: 34, borderRadius: 10, background: s.bg, border: `1px solid ${s.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Icon size={16} style={{ color: s.accent }} />
                 </div>
               </div>
               <p style={{ fontSize: 30, fontWeight: 700, fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums", color: s.accent, margin: "0 0 5px" }}>{s.value}</p>
-              <p style={{ fontSize: 11, color: "#8791a8", margin: 0 }}>{s.desc}</p>
+              <p style={{ fontSize: 11, color: "var(--text-faint)", margin: 0 }}>{s.desc}</p>
             </div>
           );
         })}
@@ -149,12 +149,12 @@ function Dashboard() {
         {/* Top 10 table */}
         <div style={{ background: "linear-gradient(160deg, rgba(255,255,255,0.84) 0%, rgba(224,231,255,0.66) 100%)", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", border: "1px solid rgba(255,255,255,0.82)", borderRadius: 18, boxShadow: "0 8px 32px rgba(59,130,246,0.08)", overflow: "hidden" }}>
           <div style={{ padding: "20px 22px 14px", borderBottom: "1px solid rgba(30,41,59,0.07)" }}>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#161b2e", margin: 0 }}>Top 10 Highest Risk Providers</h2>
-            <p style={{ fontSize: 12, color: "#8791a8", margin: "3px 0 0" }}>Ranked by fraud probability score</p>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Top 10 Highest Risk Providers</h2>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "3px 0 0" }}>Ranked by fraud probability score</p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "30px 110px 68px 80px 1fr 115px", gap: 12, padding: "8px 22px", background: "rgba(248,250,255,0.6)" }}>
             {["#", "Provider", "Tier", "Score", "State", "Exp. Loss"].map((h) => (
-              <span key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "#8791a8" }}>{h}</span>
+              <span key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-faint)" }}>{h}</span>
             ))}
           </div>
           {top10.map((p, i) => (
@@ -165,12 +165,12 @@ function Dashboard() {
               onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "rgba(59,130,246,0.06)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
             >
-              <span style={{ fontFamily: "monospace", fontSize: 12, color: i < 3 ? "#ef4444" : "#8791a8", fontWeight: i < 3 ? 700 : 400 }}>{i + 1}</span>
-              <span style={{ fontFamily: "ui-monospace,monospace", color: "#232a41" }}>{p.provider_id}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: i < 3 ? "#ef4444" : "var(--text-faint)", fontWeight: i < 3 ? 700 : 400 }}>{i + 1}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", color: "var(--text-secondary)" }}>{p.provider_id}</span>
               <TierBadge tier={p.risk_tier} />
-              <span style={{ fontFamily: "ui-monospace,monospace", color: "#232a41" }}>{p.score.toFixed(4)}</span>
-              <span style={{ color: "#8791a8" }}>{p.state ?? "—"}</span>
-              <span style={{ fontFamily: "ui-monospace,monospace", color: "#232a41", textAlign: "right" }}>{formatMoneyShort(p.expected_loss)}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", color: "var(--text-secondary)" }}>{p.score.toFixed(4)}</span>
+              <span style={{ color: "var(--text-faint)" }}>{p.state ?? "—"}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", color: "var(--text-secondary)", textAlign: "right" }}>{formatMoneyShort(p.expected_loss)}</span>
             </div>
           ))}
           <div style={{ padding: "13px 22px" }}>
@@ -187,8 +187,8 @@ function Dashboard() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Recent activity header */}
           <div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#161b2e", margin: 0 }}>Recent High Risk Activity</h2>
-            <p style={{ fontSize: 12, color: "#8791a8", margin: "3px 0 0" }}>Newly flagged providers</p>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Recent High Risk Activity</h2>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "3px 0 0" }}>Newly flagged providers</p>
           </div>
 
           {/* Recent activity cards */}
@@ -212,22 +212,22 @@ function Dashboard() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 9 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.2)" }} />
-                  <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, fontWeight: 700, color: "#161b2e" }}>{p.provider_id}</span>
+                  <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{p.provider_id}</span>
                 </div>
-                <span style={{ fontSize: 11, color: "#8791a8" }}>{RECENT_TIMES[i]}</span>
+                <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{RECENT_TIMES[i]}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <TierBadge tier={p.risk_tier} />
-                <span style={{ fontSize: 12, color: "#667088" }}>{p.state ?? "—"}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.state ?? "—"}</span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "6px 10px" }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, color: "#8791a8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>Expected loss</p>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>Expected loss</p>
                   <p style={{ fontSize: 14, fontWeight: 700, fontFamily: "ui-monospace,monospace", color: "#dc2626", margin: 0 }}>{formatMoneyShort(p.expected_loss)}</p>
                 </div>
                 <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "6px 10px" }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, color: "#8791a8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>Score</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, fontFamily: "ui-monospace,monospace", color: "#232a41", margin: 0 }}>{p.score.toFixed(4)}</p>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>Score</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, fontFamily: "ui-monospace,monospace", color: "var(--text-secondary)", margin: 0 }}>{p.score.toFixed(4)}</p>
                 </div>
               </div>
             </div>

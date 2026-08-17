@@ -82,8 +82,8 @@ function Assistant() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
       <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e", margin: 0 }}>Case assistant</h1>
-        <p style={{ marginTop: 4, fontSize: 11, color: "#667088", marginBottom: 0 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Case assistant</h1>
+        <p style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)", marginBottom: 0 }}>
           Ask general questions or tag a provider with @PRVXXXXX to get evidence-grounded answers
         </p>
       </header>
@@ -97,14 +97,14 @@ function Assistant() {
                   {m.text}
                 </span>
               ) : (
-                <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.65, margin: 0, color: m.error ? "#8791a8" : "#232a41", fontStyle: m.error ? "italic" : "normal" }}>
+                <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.65, margin: 0, color: m.error ? "var(--text-faint)" : "var(--text-secondary)", fontStyle: m.error ? "italic" : "normal" }}>
                   {m.text}
                 </p>
               )}
             </div>
           ))}
           {pending && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#8791a8" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-faint)" }}>
               <span className="animate-pulse">●</span>
               <span>Thinking…</span>
             </div>
@@ -125,10 +125,10 @@ function Assistant() {
                     setInput((v) => v.replace(/@([A-Za-z0-9]*)$/, `@${p.provider_id} `));
                     inputRef.current?.focus();
                   }}
-                  style={{ padding: "2px 8px", fontFamily: "ui-monospace,monospace", fontSize: 12, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 6, color: "#232a41", cursor: "pointer" }}
+                  style={{ padding: "2px 8px", fontFamily: "ui-monospace,monospace", fontSize: 12, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 6, color: "var(--text-secondary)", cursor: "pointer" }}
                 >
                   {p.provider_id}
-                  <span style={{ marginLeft: 6, color: "#8791a8" }}>{p.risk_tier}</span>
+                  <span style={{ marginLeft: 6, color: "var(--text-faint)" }}>{p.risk_tier}</span>
                 </button>
               ))}
             </div>
@@ -139,7 +139,7 @@ function Assistant() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder='Ask anything, or "@PRV52985 why was this flagged?"'
-              style={{ flex: 1, height: 40, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 10, padding: "0 12px", fontSize: 13, fontFamily: "inherit", color: "#161b2e", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
+              style={{ flex: 1, height: 40, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 10, padding: "0 12px", fontSize: 13, fontFamily: "inherit", color: "var(--text-primary)", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
               onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.12)"; }}
               onBlur={(e) => { e.target.style.borderColor = "rgba(100,116,139,0.22)"; e.target.style.boxShadow = "none"; }}
             />

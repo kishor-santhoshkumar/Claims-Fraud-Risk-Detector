@@ -173,7 +173,10 @@
     radial-gradient(circle at 8% 92%, rgba(16,185,129,0.16) 0%, transparent 45%),
     linear-gradient(160deg, #f5f7ff 0%, #eef1fd 45%, #fdf2f8 100%);
   --text-primary: #161b2e;
+  --text-secondary: #232a41;
+  --text-muted: #667088;
   --text-muted-g: #667088;
+  --text-faint: #8791a8;
 }
 
 /* Override Tailwind's white body background with the page gradient */
@@ -370,3 +373,59 @@ body {
 [data-theme="dark"] .ambient-bg--subtle .ambient-blob--a { opacity: 0.06; }
 [data-theme="dark"] .ambient-bg--subtle .ambient-blob--b { opacity: 0.05; }
 [data-theme="dark"] .ambient-bg--subtle .ambient-blob--c { opacity: 0.04; }
+
+/* Text color variables in dark mode */
+[data-theme="dark"] {
+  --text-primary: #f1f5f9;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-muted-g: #94a3b8;
+  --text-faint: #64748b;
+}
+
+/* Broad element overrides — catches any inline color that hasn't been
+   converted to a CSS variable yet */
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3 { color: var(--text-primary) !important; }
+
+[data-theme="dark"] p  { color: var(--text-muted) !important; }
+[data-theme="dark"] label { color: var(--text-muted) !important; }
+[data-theme="dark"] code  { color: var(--text-secondary) !important; }
+
+/* Glassmorphism header / footer bars */
+[data-theme="dark"] header {
+  background: linear-gradient(160deg, rgba(18,24,48,0.94) 0%, rgba(14,18,42,0.90) 100%) !important;
+  border-bottom-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Sidebar nav */
+[data-theme="dark"] nav {
+  background: linear-gradient(160deg, rgba(16,22,44,0.94) 0%, rgba(12,16,40,0.90) 100%) !important;
+  border-right-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Assistant / queue form footer */
+[data-theme="dark"] form {
+  background: linear-gradient(160deg, rgba(18,24,48,0.94) 0%, rgba(14,18,42,0.90) 100%) !important;
+  border-top-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Inputs and selects */
+[data-theme="dark"] input,
+[data-theme="dark"] select {
+  background: rgba(28,36,60,0.70) !important;
+  color: var(--text-primary) !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+[data-theme="dark"] input::placeholder { color: var(--text-faint) !important; }
+
+/* Dashboard stat cards & other inline-bg divs — handled via --glass-bg var */
+
+/* Scrollbar tint in dark mode */
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+}
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.03);
+}

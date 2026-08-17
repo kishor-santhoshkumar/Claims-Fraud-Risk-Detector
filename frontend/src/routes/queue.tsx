@@ -156,7 +156,7 @@ function QueuePage() {
   if (loading) {
     return (
       <div style={{ display: "flex", height: "100svh", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ fontSize: 14, color: "#667088" }}>Loading queue…</p>
+        <p style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading queue…</p>
       </div>
     );
   }
@@ -165,7 +165,7 @@ function QueuePage() {
     return (
       <div style={{ display: "flex", height: "100svh", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
         <p style={{ fontSize: 14, color: "#dc2626" }}>Failed to load: {error}</p>
-        <p style={{ fontSize: 12, color: "#667088" }}>Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code></p>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code></p>
       </div>
     );
   }
@@ -183,8 +183,8 @@ function QueuePage() {
       <header style={{ padding: "20px 24px 0", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e", margin: 0 }}>Review Queue</h1>
-            <p style={{ fontSize: 12, color: "#8791a8", margin: "2px 0 0" }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Review Queue</h1>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "2px 0 0" }}>
               {filtered.length.toLocaleString()} providers · sorted by expected loss
             </p>
           </div>
@@ -193,7 +193,7 @@ function QueuePage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search by provider ID"
-              style={{ width: 220, height: 36, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 8, padding: "0 10px", fontSize: 13, fontFamily: "inherit", color: "#161b2e", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
+              style={{ width: 220, height: 36, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 8, padding: "0 10px", fontSize: 13, fontFamily: "inherit", color: "var(--text-primary)", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
               onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.12)"; }}
               onBlur={(e) => { e.target.style.borderColor = "rgba(100,116,139,0.22)"; e.target.style.boxShadow = "none"; }}
             />
@@ -214,7 +214,7 @@ function QueuePage() {
                   height: 30, padding: "0 12px", borderRadius: 999,
                   border: filterTab === t.id ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(100,116,139,0.22)",
                   background: filterTab === t.id ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.5)",
-                  color: filterTab === t.id ? "#1d4ed8" : "#667088",
+                  color: filterTab === t.id ? "#1d4ed8" : "var(--text-muted)",
                   fontSize: 12, fontWeight: 500, fontFamily: "inherit", cursor: "pointer",
                   transition: "background 0.15s, color 0.15s",
                 }}
@@ -224,11 +224,11 @@ function QueuePage() {
             ))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, color: "#8791a8" }}>Group by</span>
+            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>Group by</span>
             <select
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-              style={{ height: 30, padding: "0 8px", borderRadius: 8, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.7)", color: "#232a41", fontSize: 12, fontFamily: "inherit", cursor: "pointer", outline: "none" }}
+              style={{ height: 30, padding: "0 8px", borderRadius: 8, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.7)", color: "var(--text-secondary)", fontSize: 12, fontFamily: "inherit", cursor: "pointer", outline: "none" }}
             >
               <option value="none">None</option>
               <option value="risk">Risk Tier</option>
@@ -242,12 +242,12 @@ function QueuePage() {
                 height: 30, padding: "0 10px", borderRadius: 8,
                 border: "1px solid rgba(100,116,139,0.22)",
                 background: "rgba(255,255,255,0.7)",
-                color: "#232a41", fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                color: "var(--text-secondary)", fontSize: 13, fontFamily: "inherit", cursor: "pointer",
                 display: "flex", alignItems: "center", gap: 4,
                 transition: "background 0.15s, border-color 0.15s",
               }}
               onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = "rgba(59,130,246,0.1)"; b.style.borderColor = "rgba(59,130,246,0.35)"; b.style.color = "#1d4ed8"; }}
-              onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.7)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "#232a41"; }}
+              onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = "rgba(255,255,255,0.7)"; b.style.borderColor = "rgba(100,116,139,0.22)"; b.style.color = "var(--text-secondary)"; }}
             >
               {sortDir === "desc" ? "↓" : "↑"}
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.03em" }}>{sortDir === "desc" ? "Desc" : "Asc"}</span>
@@ -267,7 +267,7 @@ function QueuePage() {
               </span>
               <button
                 onClick={() => setSearchResult(null)}
-                style={{ fontSize: 12, color: "#8791a8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ fontSize: 12, color: "var(--text-faint)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
               >
                 Dismiss ×
               </button>
@@ -278,12 +278,12 @@ function QueuePage() {
               onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "rgba(59,130,246,0.08)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
             >
-              <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, fontWeight: 600, color: "#232a41" }}>{searchResult.provider_id}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>{searchResult.provider_id}</span>
               <TierBadge tier={searchResult.risk_tier} />
-              <span style={{ fontSize: 13, color: "#667088" }}>{searchResult.state ?? "—"}</span>
-              <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, color: "#232a41" }}>{searchResult.score.toFixed(4)}</span>
-              <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, color: "#232a41", textAlign: "right" }}>{formatMoneyShort(searchResult.expected_loss)}</span>
-              <span style={{ fontSize: 13, color: "#8791a8", textAlign: "right" }}>{searchResult.n_claims.toLocaleString()} claims</span>
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{searchResult.state ?? "—"}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, color: "var(--text-secondary)" }}>{searchResult.score.toFixed(4)}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, color: "var(--text-secondary)", textAlign: "right" }}>{formatMoneyShort(searchResult.expected_loss)}</span>
+              <span style={{ fontSize: 13, color: "var(--text-faint)", textAlign: "right" }}>{searchResult.n_claims.toLocaleString()} claims</span>
             </div>
           </div>
         )}
@@ -300,8 +300,8 @@ function QueuePage() {
               {groupBy !== "none" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                   <div style={{ width: 3, height: 16, borderRadius: 2, background: section.accent, flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#232a41" }}>{section.title}</span>
-                  <span style={{ fontSize: 12, color: "#8791a8" }}>({section.providers.length.toLocaleString()} providers)</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>{section.title}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>({section.providers.length.toLocaleString()} providers)</span>
                 </div>
               )}
 
@@ -309,7 +309,7 @@ function QueuePage() {
                 {/* Column headers */}
                 <div style={{ display: "grid", gridTemplateColumns: "40px 110px 70px 1fr 90px 110px 100px", gap: 10, padding: "7px 16px", background: "rgba(248,250,255,0.5)", borderBottom: "1px solid rgba(30,41,59,0.07)" }}>
                   {["#", "Provider ID", "Tier", "State", "Score", "Exp. Loss", "Claims"].map(h => (
-                    <span key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#8791a8" }}>{h}</span>
+                    <span key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-faint)" }}>{h}</span>
                   ))}
                 </div>
 
@@ -326,19 +326,19 @@ function QueuePage() {
                       fontSize: 13,
                       cursor: "pointer",
                       borderBottom: "1px solid rgba(30,41,59,0.05)",
-                      color: p.status !== "unreviewed" ? "#8791a8" : "#232a41",
+                      color: p.status !== "unreviewed" ? "var(--text-faint)" : "var(--text-secondary)",
                       transition: "background 0.1s",
                     }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "rgba(59,130,246,0.05)"; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
                   >
-                    <span style={{ fontFamily: "monospace", fontSize: 11, color: "#8791a8" }}>{i + 1}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-faint)" }}>{i + 1}</span>
                     <span style={{ fontFamily: "ui-monospace,monospace" }}>{p.provider_id}</span>
                     <TierBadge tier={p.risk_tier} />
-                    <span style={{ color: "#8791a8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.state ?? "—"}</span>
+                    <span style={{ color: "var(--text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.state ?? "—"}</span>
                     <span style={{ fontFamily: "ui-monospace,monospace", fontVariantNumeric: "tabular-nums" }}>{p.score.toFixed(4)}</span>
                     <span style={{ fontFamily: "ui-monospace,monospace", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{formatMoneyShort(p.expected_loss)}</span>
-                    <span style={{ color: "#8791a8", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{p.n_claims.toLocaleString()}</span>
+                    <span style={{ color: "var(--text-faint)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{p.n_claims.toLocaleString()}</span>
                   </div>
                 ))}
 
@@ -349,7 +349,7 @@ function QueuePage() {
                       style={{ fontSize: 13, color: "#3b82f6", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
                     >
                       Show {Math.min(PAGE, remaining).toLocaleString()} more
-                      <span style={{ color: "#8791a8" }}> · {remaining.toLocaleString()} remaining</span>
+                      <span style={{ color: "var(--text-faint)" }}> · {remaining.toLocaleString()} remaining</span>
                     </button>
                   </div>
                 )}

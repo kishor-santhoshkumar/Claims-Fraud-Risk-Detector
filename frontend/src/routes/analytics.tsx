@@ -57,7 +57,7 @@ const RADAR_KEYS = Object.keys(RADAR_LABELS);
 function Panel({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
     <section className={`glass-panel ${className}`}>
-      <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-wide" style={{ color: "#47516b" }}>
+      <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
         {title}
       </h2>
       <div className="h-64">{children}</div>
@@ -139,16 +139,16 @@ function Analytics() {
   return (
     <div className="px-6 pb-16">
       <header className="py-6">
-        <h1 className="text-[22px] font-semibold" style={{ color: "#161b2e" }}>Analytics</h1>
-        <p className="mt-1 text-[13px]" style={{ color: "#667088" }}>Model coverage and review outcomes.</p>
+        <h1 className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Analytics</h1>
+        <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>Model coverage and review outcomes.</p>
       </header>
 
       {/* KPI tiles */}
       <div className="my-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {metrics.map((m) => (
           <div key={m.label} className={`glass-card p-4 border-l-4 ${m.color}`}>
-            <p className="text-[11px] uppercase tracking-wide" style={{ color: "#667088" }}>{m.label}</p>
-            <p className="mt-1 font-mono text-[22px] tabular-nums" style={{ color: "#161b2e" }}>{m.value}</p>
+            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{m.label}</p>
+            <p className="mt-1 font-mono text-[22px] tabular-nums" style={{ color: "var(--text-primary)" }}>{m.value}</p>
           </div>
         ))}
       </div>
@@ -259,7 +259,7 @@ function Analytics() {
 
         {/* Area — fraud capture curve */}
         <section className="glass-panel">
-          <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-wide" style={{ color: "#47516b" }}>
+          <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
             Fraud dollars captured by queue size
           </h2>
           <div className="h-64">
