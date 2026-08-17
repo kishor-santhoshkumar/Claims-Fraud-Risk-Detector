@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchQueue, setDisposition, type CaseStatus, type QueueItem } from "./api";
+import { setDisposition, type CaseStatus, type QueueItem } from "./api";
 
 export type { CaseStatus };
 
@@ -43,16 +43,14 @@ export function CaseStoreProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchQueue(5410)
+    fetch("/queue_data.json")
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load queue_data.json: ${r.status}`);
+        return r.json() as Promise<QueueItem[]>;
+      })
       .then((items) => {
         if (!cancelled) {
           setBaseProviders(items);
-          // Seed local status overrides from API response
-          const initial: Record<string, CaseStatus> = {};
-          items.forEach((p) => {
-            if (p.status !== "unreviewed") initial[p.provider_id] = p.status;
-          });
-          setLocalStatuses(initial);
           setLoading(false);
         }
       })
