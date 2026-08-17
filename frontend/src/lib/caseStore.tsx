@@ -43,7 +43,7 @@ export function CaseStoreProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchQueue(500)
+    fetchQueue(5410)
       .then((items) => {
         if (!cancelled) {
           setBaseProviders(items);

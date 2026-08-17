@@ -1,249 +1,260 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { useCaseStore, type CaseStatus } from "@/lib/caseStore";
-import { type CaseProvider } from "@/lib/caseStore";
+import { useMemo } from "react";
+import { AlertTriangle, DollarSign, Shield, Users } from "lucide-react";
+import { useCaseStore } from "@/lib/caseStore";
 import { formatMoneyShort } from "@/lib/mockData";
 
 export const Route = createFileRoute("/")({
-  component: Queue,
+  component: Dashboard,
 });
 
-type Tab = "all" | "unreviewed" | "confirmed" | "cleared";
+const RECENT_TIMES = ["47 min ago", "1 hr 12 min ago", "2 hr 38 min ago"];
 
-function TierBadge({ tier }: { tier: CaseProvider["risk_tier"] }) {
-  const label = tier === "high" ? "High" : tier === "medium" ? "Medium" : "Low";
-  const styles: Record<string, React.CSSProperties> = {
-    high:   { background: "rgba(239,68,68,0.12)",  border: "1px solid rgba(239,68,68,0.3)",  color: "#dc2626" },
-    medium: { background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "#b45309" },
-    low:    { background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#059669" },
-  };
+function TierBadge({ tier }: { tier: "high" | "medium" | "low" }) {
+  const map = {
+    high:   { bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.3)",  color: "#dc2626", label: "High" },
+    medium: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", color: "#b45309", label: "Medium" },
+    low:    { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.3)", color: "#059669", label: "Low" },
+  }[tier];
   return (
-    <span style={{ display: "inline-flex", width: 62, justifyContent: "center", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 600, ...styles[tier] }}>
-      {label}
+    <span style={{ display: "inline-flex", justifyContent: "center", minWidth: 60, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600, background: map.bg, border: `1px solid ${map.border}`, color: map.color }}>
+      {map.label}
     </span>
   );
 }
 
-function Queue() {
+function Dashboard() {
   const navigate = useNavigate();
-  const { providers, loading, error, counts, setStatus, reset } = useCaseStore();
-  const [tab, setTab] = useState<Tab>("all");
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState(0);
-  const rowsRef = useRef<HTMLDivElement>(null);
+  const { providers, loading, error } = useCaseStore();
 
-  const queue = useMemo(
-    () => [...providers].sort((a, b) => b.expected_loss - a.expected_loss),
-    [providers],
-  );
-
-  const visible = useMemo(
-    () =>
-      queue.filter((p) =>
-        tab === "all"
-          ? true
-          : tab === "unreviewed"
-            ? p.status === "unreviewed" || p.status === "needs_info"
-            : p.status === tab,
-      ),
-    [queue, tab],
-  );
-
-  const openProvider = (p: CaseProvider) =>
-    navigate({
-      to: p.risk_tier === "low" ? "/clearance/$providerId" : "/case/$providerId",
-      params: { providerId: p.provider_id },
-    });
-
-  const decide = (p: CaseProvider, status: CaseStatus) => {
-    setStatus(p.provider_id, status);
-    toast(`${p.provider_id} ${status === "confirmed" ? "confirmed as fraud" : "cleared"}`, {
-      action: { label: "Undo", onClick: () => setStatus(p.provider_id, "unreviewed") },
-    });
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
-      const current = visible[selected];
-      if (e.key === "j" || e.key === "J") {
-        e.preventDefault();
-        setSelected((s) => Math.min(s + 1, visible.length - 1));
-      } else if (e.key === "k" || e.key === "K") {
-        e.preventDefault();
-        setSelected((s) => Math.max(s - 1, 0));
-      } else if (e.key === "Enter" && current) {
-        openProvider(current);
-      } else if ((e.key === "c" || e.key === "C") && current) {
-        decide(current, "cleared");
-      } else if ((e.key === "f" || e.key === "F") && current) {
-        decide(current, "confirmed");
-      }
+  const stats = useMemo(() => {
+    const high = providers.filter(p => p.risk_tier === "high");
+    const flagged = providers.filter(p => p.risk_tier !== "low");
+    return {
+      total: providers.length,
+      flagged: flagged.length,
+      highRisk: high.length,
+      dollarsAtRisk: flagged.reduce((s, p) => s + p.expected_loss, 0),
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [visible, selected]);
+  }, [providers]);
 
-  useEffect(() => {
-    const el = rowsRef.current?.querySelector<HTMLElement>(`[data-idx="${selected}"]`);
-    el?.scrollIntoView({ block: "nearest" });
-  }, [selected]);
+  const top10 = useMemo(
+    () => [...providers].filter(p => p.risk_tier === "high").sort((a, b) => b.score - a.score).slice(0, 10),
+    [providers]
+  );
 
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = search.trim().toUpperCase();
-    const p = providers.find((x) => x.provider_id === id);
-    if (!p) {
-      toast(`No provider matches ${id || "that ID"}`);
-      return;
-    }
-    setSearch("");
-    openProvider(p);
-  };
-
-  const allReviewed = counts.reviewed >= queue.length && queue.length > 0;
+  const recentActivity = useMemo(() => {
+    const sorted = [...providers]
+      .filter(p => p.risk_tier === "high")
+      .sort((a, b) => b.expected_loss - a.expected_loss);
+    return [sorted[2], sorted[5], sorted[9]].filter(Boolean) as typeof providers;
+  }, [providers]);
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-[14px]" style={{ color: "#667088" }}>Loading queue from backend…</p>
+      <div style={{ display: "flex", height: "100svh", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ fontSize: 14, color: "#667088" }}>Loading dashboard…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3">
-        <p className="text-[14px] text-risk">Failed to load queue: {error}</p>
-        <p className="text-[12px]" style={{ color: "#667088" }}>
-          Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code>
-        </p>
+      <div style={{ display: "flex", height: "100svh", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        <p style={{ fontSize: 14, color: "#dc2626" }}>Failed to load: {error}</p>
+        <p style={{ fontSize: 12, color: "#667088" }}>Make sure the backend is running: <code>python -m uvicorn api_temp:app --reload</code></p>
       </div>
     );
   }
 
+  const statCards = [
+    {
+      label: "Providers Scored",
+      value: stats.total.toLocaleString(),
+      icon: Users,
+      accent: "#3b82f6",
+      bg: "rgba(59,130,246,0.09)",
+      border: "rgba(59,130,246,0.22)",
+      desc: "Total in scoring pipeline",
+    },
+    {
+      label: "Flagged for Review",
+      value: stats.flagged.toLocaleString(),
+      icon: AlertTriangle,
+      accent: "#f59e0b",
+      bg: "rgba(245,158,11,0.09)",
+      border: "rgba(245,158,11,0.22)",
+      desc: "High + medium risk tier",
+    },
+    {
+      label: "High Risk",
+      value: stats.highRisk.toLocaleString(),
+      icon: Shield,
+      accent: "#ef4444",
+      bg: "rgba(239,68,68,0.09)",
+      border: "rgba(239,68,68,0.22)",
+      desc: "Score ≥ 0.50",
+    },
+    {
+      label: "Dollars at Risk",
+      value: formatMoneyShort(stats.dollarsAtRisk),
+      icon: DollarSign,
+      accent: "#6366f1",
+      bg: "rgba(99,102,241,0.09)",
+      border: "rgba(99,102,241,0.22)",
+      desc: "Expected loss, flagged cases",
+    },
+  ];
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
-      {/* Glass header */}
-      <header style={{ padding: "20px 24px 0", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)" }}>
-        {/* Title row */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600, color: "#161b2e", margin: 0 }}>
-            Hey CodeCrafters
-          </h1>
-          <form onSubmit={submitSearch}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Go to provider ID"
-              style={{ width: 224, height: 36, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 8, padding: "0 10px", fontSize: 13, fontFamily: "inherit", color: "#161b2e", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
-              onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.12)"; }}
-              onBlur={(e) => { e.target.style.borderColor = "rgba(100,116,139,0.22)"; e.target.style.boxShadow = "none"; }}
-            />
-          </form>
-        </div>
+    <div style={{ padding: "28px 28px 56px", display: "flex", flexDirection: "column", gap: 28, overflowY: "auto", height: "100svh", boxSizing: "border-box" }}>
+      {/* Page header */}
+      <div>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: "#161b2e", margin: 0, letterSpacing: "-0.02em" }}>Dashboard</h1>
+        <p style={{ fontSize: 13, color: "#8791a8", margin: "5px 0 0" }}>Medicare provider fraud risk · Model v1.0 · 31 features</p>
+      </div>
 
-        {/* Stat squares */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
-          {[
-            { label: "Total cases",   value: queue.length.toLocaleString(),             accent: "#3b82f6", bg: "rgba(59,130,246,0.10)",  border: "rgba(59,130,246,0.25)" },
-            { label: "Reviewed",      value: counts.reviewed.toLocaleString(),           accent: "#6366f1", bg: "rgba(99,102,241,0.10)",  border: "rgba(99,102,241,0.25)" },
-            { label: "At risk",       value: formatMoneyShort(counts.atRisk),            accent: "#ef4444", bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.25)"  },
-          ].map((s) => (
-            <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, padding: "12px 16px", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-              <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "#667088", margin: "0 0 4px" }}>{s.label}</p>
-              <p style={{ fontSize: 20, fontWeight: 700, fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums", color: s.accent, margin: 0 }}>{s.value}</p>
+      {/* Stat cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+        {statCards.map((s) => {
+          const Icon = s.icon;
+          return (
+            <div
+              key={s.label}
+              style={{
+                background: s.bg,
+                border: `1px solid ${s.border}`,
+                borderRadius: 18,
+                padding: "20px 22px",
+                backdropFilter: "blur(14px) saturate(160%)",
+                WebkitBackdropFilter: "blur(14px) saturate(160%)",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.09em", color: "#8791a8", margin: 0 }}>{s.label}</p>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: s.bg, border: `1px solid ${s.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon size={16} style={{ color: s.accent }} />
+                </div>
+              </div>
+              <p style={{ fontSize: 30, fontWeight: 700, fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums", color: s.accent, margin: "0 0 5px" }}>{s.value}</p>
+              <p style={{ fontSize: 11, color: "#8791a8", margin: 0 }}>{s.desc}</p>
             </div>
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
-        {/* Filter chips */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingBottom: 14 }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            {(["all", "unreviewed", "confirmed", "cleared"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => { setTab(t); setSelected(0); }}
-                style={{
-                  height: 30, padding: "0 13px", borderRadius: 999,
-                  border: tab === t ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(100,116,139,0.22)",
-                  background: tab === t ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.5)",
-                  color: tab === t ? "#1d4ed8" : "#667088",
-                  fontSize: 12, fontWeight: 500, fontFamily: "inherit", cursor: "pointer",
-                  transition: "background 0.15s, color 0.15s, border-color 0.15s",
-                  textTransform: "capitalize",
-                }}
-              >
-                {t === "all" ? "All" : t}
-              </button>
+      {/* Main content */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, alignItems: "start" }}>
+        {/* Top 10 table */}
+        <div style={{ background: "linear-gradient(160deg, rgba(255,255,255,0.84) 0%, rgba(224,231,255,0.66) 100%)", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", border: "1px solid rgba(255,255,255,0.82)", borderRadius: 18, boxShadow: "0 8px 32px rgba(59,130,246,0.08)", overflow: "hidden" }}>
+          <div style={{ padding: "20px 22px 14px", borderBottom: "1px solid rgba(30,41,59,0.07)" }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#161b2e", margin: 0 }}>Top 10 Highest Risk Providers</h2>
+            <p style={{ fontSize: 12, color: "#8791a8", margin: "3px 0 0" }}>Ranked by fraud probability score</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "30px 110px 68px 80px 1fr 115px", gap: 12, padding: "8px 22px", background: "rgba(248,250,255,0.6)" }}>
+            {["#", "Provider", "Tier", "Score", "State", "Exp. Loss"].map((h) => (
+              <span key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "#8791a8" }}>{h}</span>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: "#8791a8" }}>
-            J / K move · Enter opens · F confirms · C clears
-          </p>
-        </div>
-      </header>
-
-      {/* Provider list inside glass card */}
-      <div ref={rowsRef} style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
-        {allReviewed ? (
-          <div style={{ maxWidth: 480, margin: "96px auto 0", textAlign: "center" }} className="glass-panel">
-            <p style={{ fontSize: 15, color: "#232a41", marginBottom: 16 }}>
-              All {queue.length} cases reviewed. {counts.confirmed} confirmed, {counts.cleared} cleared.
-            </p>
-            <button
-              onClick={reset}
-              style={{ height: 36, padding: "0 16px", borderRadius: 8, border: "1px solid rgba(100,116,139,0.22)", background: "rgba(255,255,255,0.6)", color: "#47516b", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}
+          {top10.map((p, i) => (
+            <div
+              key={p.provider_id}
+              onClick={() => navigate({ to: "/case/$providerId", params: { providerId: p.provider_id } })}
+              style={{ display: "grid", gridTemplateColumns: "30px 110px 68px 80px 1fr 115px", gap: 12, padding: "11px 22px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid rgba(30,41,59,0.05)", transition: "background 0.1s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "rgba(59,130,246,0.06)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
             >
-              Reset queue
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: i < 3 ? "#ef4444" : "#8791a8", fontWeight: i < 3 ? 700 : 400 }}>{i + 1}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", color: "#232a41" }}>{p.provider_id}</span>
+              <TierBadge tier={p.risk_tier} />
+              <span style={{ fontFamily: "ui-monospace,monospace", color: "#232a41" }}>{p.score.toFixed(4)}</span>
+              <span style={{ color: "#8791a8" }}>{p.state ?? "—"}</span>
+              <span style={{ fontFamily: "ui-monospace,monospace", color: "#232a41", textAlign: "right" }}>{formatMoneyShort(p.expected_loss)}</span>
+            </div>
+          ))}
+          <div style={{ padding: "13px 22px" }}>
+            <button
+              onClick={() => navigate({ to: "/queue" })}
+              style={{ fontSize: 13, color: "#3b82f6", fontWeight: 500, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+            >
+              View full review queue →
             </button>
           </div>
-        ) : visible.length === 0 ? (
-          <div style={{ maxWidth: 480, margin: "96px auto 0", textAlign: "center", fontSize: 14, color: "#667088" }}>
-            Switch to All to pick up the next case in the queue.
+        </div>
+
+        {/* Right column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Recent activity header */}
+          <div>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#161b2e", margin: 0 }}>Recent High Risk Activity</h2>
+            <p style={{ fontSize: 12, color: "#8791a8", margin: "3px 0 0" }}>Newly flagged providers</p>
           </div>
-        ) : (
-          <div className="glass-card" style={{ overflow: "hidden" }}>
-            {visible.map((p, i) => {
-              const reviewed = p.status !== "unreviewed";
-              return (
-                <div
-                  key={p.provider_id}
-                  data-idx={i}
-                  onClick={() => { setSelected(i); openProvider(p); }}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "44px 110px 74px 1fr 120px 110px",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "10px 16px",
-                    fontSize: 13,
-                    cursor: "pointer",
-                    borderBottom: "1px solid rgba(30,41,59,0.06)",
-                    background: selected === i ? "rgba(59,130,246,0.08)" : "transparent",
-                    color: reviewed ? "#8791a8" : "#232a41",
-                    transition: "background 0.1s",
-                  }}
-                  onMouseEnter={(e) => { if (selected !== i) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.4)"; }}
-                  onMouseLeave={(e) => { if (selected !== i) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
-                >
-                  <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 12, color: "#8791a8" }}>{i + 1}</span>
-                  <span style={{ fontFamily: "ui-monospace,monospace" }}>{p.provider_id}</span>
-                  <TierBadge tier={p.risk_tier} />
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#8791a8" }}>{p.state ?? "—"}</span>
-                  <span style={{ textAlign: "right", fontFamily: "ui-monospace,monospace", fontVariantNumeric: "tabular-nums" }}>
-                    {formatMoneyShort(p.expected_loss)}
-                  </span>
-                  <span style={{ textAlign: "right", color: "#8791a8", fontVariantNumeric: "tabular-nums" }}>
-                    {p.n_claims.toLocaleString()} claims
-                  </span>
+
+          {/* Recent activity cards */}
+          {recentActivity.map((p, i) => (
+            <div
+              key={p.provider_id}
+              onClick={() => navigate({ to: "/case/$providerId", params: { providerId: p.provider_id } })}
+              style={{
+                background: "linear-gradient(160deg, rgba(255,255,255,0.84) 0%, rgba(254,226,226,0.52) 100%)",
+                backdropFilter: "blur(16px) saturate(180%)",
+                WebkitBackdropFilter: "blur(16px) saturate(180%)",
+                border: "1px solid rgba(239,68,68,0.18)",
+                borderRadius: 16,
+                padding: "16px 18px",
+                cursor: "pointer",
+                transition: "box-shadow 0.2s, transform 0.2s",
+              }}
+              onMouseEnter={(e) => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = "0 8px 28px rgba(239,68,68,0.14)"; el.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={(e) => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = ""; el.style.transform = ""; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 9 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.2)" }} />
+                  <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, fontWeight: 700, color: "#161b2e" }}>{p.provider_id}</span>
                 </div>
-              );
-            })}
+                <span style={{ fontSize: 11, color: "#8791a8" }}>{RECENT_TIMES[i]}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <TierBadge tier={p.risk_tier} />
+                <span style={{ fontSize: 12, color: "#667088" }}>{p.state ?? "—"}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "6px 10px" }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: "#8791a8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>Expected loss</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, fontFamily: "ui-monospace,monospace", color: "#dc2626", margin: 0 }}>{formatMoneyShort(p.expected_loss)}</p>
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "6px 10px" }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: "#8791a8", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>Score</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, fontFamily: "ui-monospace,monospace", color: "#232a41", margin: 0 }}>{p.score.toFixed(4)}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Quick actions */}
+          <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(59,130,246,0.1) 100%)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(99,102,241,0.22)", borderRadius: 16, padding: "16px 18px" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#4338ca", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.09em" }}>Quick actions</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {[
+                { label: "Open Review Queue", to: "/queue" },
+                { label: "Case Assistant",    to: "/assistant" },
+                { label: "Run Simulation",    to: "/simulation" },
+              ].map((a) => (
+                <button
+                  key={a.to}
+                  onClick={() => navigate({ to: a.to as "/" })}
+                  style={{ width: "100%", height: 34, borderRadius: 9, border: "1px solid rgba(99,102,241,0.22)", background: "rgba(255,255,255,0.65)", color: "#4338ca", fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", textAlign: "left", padding: "0 12px", transition: "background 0.15s" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.9)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.65)"; }}
+                >
+                  {a.label} →
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

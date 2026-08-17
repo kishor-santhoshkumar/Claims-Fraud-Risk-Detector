@@ -1,13 +1,14 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, ListChecks, LogOut, MessageSquare, Settings, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { BarChart3, LayoutDashboard, ListChecks, LogOut, MessageSquare, Settings, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { logout } from "@/lib/auth";
 
 const items = [
-  { to: "/", label: "Queue", icon: ListChecks },
-  { to: "/assistant", label: "Assistant", icon: MessageSquare },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/simulation", label: "Simulation", icon: SlidersHorizontal },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/",           label: "Dashboard", icon: LayoutDashboard },
+  { to: "/queue",      label: "Queue",     icon: ListChecks },
+  { to: "/assistant",  label: "Assistant", icon: MessageSquare },
+  { to: "/analytics",  label: "Analytics", icon: BarChart3 },
+  { to: "/simulation", label: "Simulation",icon: SlidersHorizontal },
+  { to: "/settings",   label: "Settings",  icon: Settings },
 ];
 
 const SIDEBAR_STYLE: React.CSSProperties = {
