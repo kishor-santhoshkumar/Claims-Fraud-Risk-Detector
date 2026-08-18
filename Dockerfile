@@ -25,8 +25,10 @@ COPY api_temp.py main.py rules.yaml ./
 # policy_chunks.jsonl    — raw policy text (used to build the indexes below)
 # narratives.json        — pre-generated LLM narrative cache
 COPY outputs/scored_providers.json outputs/scored_providers.json
-COPY outputs/policy_chunks.jsonl   outputs/policy_chunks.jsonl
-COPY outputs/narratives.json       outputs/narratives.json
+COPY outputs/policy_chunks.jsonl         outputs/policy_chunks.jsonl
+COPY outputs/narratives.json             outputs/narratives.json
+COPY outputs/simulation_base.json        outputs/simulation_base.json
+COPY outputs/simulation_narrative.json   outputs/simulation_narrative.json
 
 # ── Build ChromaDB dense index ────────────────────────────────────────────────
 # This step also downloads and caches the ONNX embedding model inside the image,
