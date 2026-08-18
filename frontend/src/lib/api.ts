@@ -339,6 +339,69 @@ export interface ChatHistoryMessage {
   content: string;
 }
 
+// ── Simulation replay types ───────────────────────────────────────────────────
+
+export interface ClaimSample {
+  claim_id: string;
+  bene_id: string;
+  provider_id: string;
+  amount: number;
+  claim_start_dt: string;
+  claim_type: "inpatient" | "outpatient";
+  rule_flags: string[];
+}
+
+export interface ProviderCrossing {
+  provider_id: string;
+  score: number;
+  tier: RiskTier;
+  expected_loss: number;
+  trigger: string;
+}
+
+export interface BatchCumulative {
+  claims_processed: number;
+  money_at_risk: number;
+  queue_high: number;
+  queue_medium: number;
+  queue_low: number;
+  investigator_hours: number;
+}
+
+export interface ReplayBatch {
+  tick: number;
+  label: string;
+  date_range: string;
+  claims_processed: number;
+  claims_sample: ClaimSample[];
+  rules_fired: Record<string, number>;
+  flags_by_category: { fraud: number; waste: number; abuse: number };
+  providers_crossing_threshold: ProviderCrossing[];
+  cumulative: BatchCumulative;
+}
+
+export interface ReplayFinalSummary {
+  total_claims: number;
+  total_flagged: number;
+  money_at_risk: number;
+  fraud_caught: number;
+  fraud_missed: number;
+  false_positives: number;
+  share_of_fraud_caught: number;
+  investigator_hours: number;
+  top_providers: { provider_id: string; score: number; expected_loss: number; risk_tier: string }[];
+  narrative: string;
+}
+
+export interface ReplayResponse {
+  batches: ReplayBatch[];
+  final_summary: ReplayFinalSummary;
+}
+
+export async function fetchSimulationReplay(capacity: number): Promise<ReplayResponse> {
+  return apiFetch<ReplayResponse>(`/simulation/replay?capacity=${capacity}`);
+}
+
 /** POST /chat — general assistant with optional provider evidence context and conversation history. */
 export async function chatWithAssistant(
   message: string,

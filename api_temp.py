@@ -57,7 +57,7 @@ from src.export import (  # noqa: E402
     _build_shap_evidence,
 )
 from src.evidence_assembler import assemble  # noqa: E402
-from src.narrator import narrate_case, narrate_clearance  # noqa: E402
+from src.narrator import narrate_case, narrate_clearance, narrate_simulation  # noqa: E402
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -1366,3 +1366,42 @@ def chat_assistant(body: ChatRequest):
             detail="LLM service temporarily unavailable. Try again in a moment.",
         )
     return ChatResponse(reply=result)
+
+
+# ── Simulation replay ─────────────────────────────────────────────────────────
+
+_SIM_BASE: dict | None = None
+
+
+@app.get("/simulation/replay", summary="Pre-computed 6-tick claim replay")
+def get_simulation_replay(capacity: int = Query(100, ge=1, le=5000)):
+    """Return the full 6-tick simulation replay payload.
+
+    All batch data is precomputed from claim CSVs and cached to
+    outputs/simulation_base.json (committed to the repo so it is available
+    on Railway without the raw CSV files).
+
+    The capacity parameter determines which providers fall within the review
+    queue and drives the final fraud_caught / false_positives numbers.
+
+    Returns 503 if simulation_base.json is missing and CSVs are also absent.
+    """
+    global _SIM_BASE
+    from src.simulation import load_base, build_replay, SIMULATION_BASE_PATH
+
+    try:
+        if _SIM_BASE is None:
+            _SIM_BASE = load_base()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Simulation base data not available. "
+                f"Run python -m src.simulation locally to generate outputs/simulation_base.json. ({exc})"
+            ),
+        )
+
+    try:
+        return build_replay(capacity)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Replay build failed: {exc}")

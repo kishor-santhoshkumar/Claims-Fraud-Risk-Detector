@@ -129,10 +129,11 @@ def _call_groq(system: str, user: str, model: str) -> Optional[str]:
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                temperature=0,
-                max_tokens=400,
+                temperature=1,
+                max_tokens=2000,
             )
-            return resp.choices[0].message.content.strip()
+            content = resp.choices[0].message.content or ""
+            return content.strip() or None
         except Exception as exc:
             err = str(exc).lower()
             if "429" in err or "rate" in err or "limit" in err:
@@ -156,10 +157,11 @@ def _call_groq_messages(messages: list[dict], model: str) -> Optional[str]:
             resp = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0,
-                max_tokens=400,
+                temperature=1,
+                max_tokens=2000,
             )
-            return resp.choices[0].message.content.strip()
+            content = resp.choices[0].message.content or ""
+            return content.strip() or None
         except Exception as exc:
             err = str(exc).lower()
             if "429" in err or "rate" in err or "limit" in err:
@@ -340,4 +342,57 @@ def narrate_clearance(provider: ScoredProvider) -> Optional[str]:
     if result:
         cache[cache_key] = result
         _save_cache()
+    return result
+
+
+_SIMULATION_NARRATIVE_PATH = OUTPUTS / "simulation_narrative.json"
+
+_SYSTEM_SIMULATION = (
+    "You are writing a brief closing summary for a Medicare fraud-detection system "
+    "that has just finished processing one year of claims data.\n\n"
+    "Write exactly 3-4 sentences summarising what the run found. Include:\n"
+    "1. The volume of claims processed and the time period covered.\n"
+    "2. How many providers crossed the review threshold and the total money at risk.\n"
+    "3. The single largest case (provider ID and expected loss in dollars).\n"
+    "4. One sentence on what the findings suggest for the investigative workload.\n\n"
+    "Rules:\n"
+    "- Never say a provider 'committed fraud' — use 'flagged for review' or 'crossed the threshold'.\n"
+    "- Never mention a model score, probability, or risk tier.\n"
+    "- Use concrete numbers from the summary object provided.\n"
+    "- Keep under 120 words total.\n"
+    "- Write in plain English suitable for a senior investigator briefing."
+)
+
+
+def narrate_simulation(final_summary: dict) -> Optional[str]:
+    """Generate a 3-4 sentence closing narrative for the simulation replay.
+
+    Cached to outputs/simulation_narrative.json. Returns None if Groq is unavailable.
+    Never called during the replay itself — the endpoint serves cached text only.
+    """
+    if _SIMULATION_NARRATIVE_PATH.exists():
+        with open(_SIMULATION_NARRATIVE_PATH, encoding="utf-8") as f:
+            return json.load(f).get("narrative")
+
+    top = final_summary.get("top_providers", [{}])[0] if final_summary.get("top_providers") else {}
+    prompt_lines = [
+        f"Claims processed: {final_summary.get('total_claims', 0):,} (full year 2009)",
+        f"Providers crossing review threshold: {final_summary.get('total_flagged', 0)}",
+        f"Total money at risk: ${final_summary.get('money_at_risk', 0):,.0f}",
+        f"Fraud cases caught at current capacity: {final_summary.get('fraud_caught', 0)} "
+        f"(of {final_summary.get('fraud_caught', 0) + final_summary.get('fraud_missed', 0)} total flagged fraudsters)",
+        f"False positives: {final_summary.get('false_positives', 0)}",
+    ]
+    if top:
+        prompt_lines.append(
+            f"Largest single case: provider {top.get('provider_id', '?')} "
+            f"with ${top.get('expected_loss', 0):,.0f} expected loss"
+        )
+    prompt = "\n".join(prompt_lines)
+
+    _init_clients()
+    result = _call_groq(_SYSTEM_SIMULATION, prompt, _MODEL_MEDIUM)
+    if result:
+        with open(_SIMULATION_NARRATIVE_PATH, "w", encoding="utf-8") as f:
+            json.dump({"narrative": result}, f, indent=2)
     return result
