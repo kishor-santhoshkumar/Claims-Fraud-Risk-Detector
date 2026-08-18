@@ -137,30 +137,34 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setExplaining(true)}
+            disabled={explaining}
             style={{
-              background: "rgba(0,0,0,0.05)",
-              border: "2px solid #111111",
-              color: "#111111",
+              background: explaining ? "rgba(59,130,246,0.08)" : "rgba(0,0,0,0.05)",
+              border: explaining ? "2px solid #3b82f6" : "2px solid #111111",
+              color: explaining ? "#1d4ed8" : "#111111",
               padding: "8px 14px",
               fontSize: 13,
               fontWeight: 600,
               fontFamily: "inherit",
               borderRadius: 6,
-              cursor: "pointer",
-              transition: "background 0.15s, color 0.15s",
+              cursor: explaining ? "default" : "pointer",
+              transition: "background 0.15s, color 0.15s, border-color 0.15s",
+              opacity: explaining ? 0.8 : 1,
             }}
             onMouseEnter={(e) => {
+              if (explaining) return;
               const b = e.currentTarget;
               b.style.background = "#111111";
               b.style.color = "#ffffff";
             }}
             onMouseLeave={(e) => {
+              if (explaining) return;
               const b = e.currentTarget;
               b.style.background = "rgba(0,0,0,0.05)";
               b.style.color = "#111111";
             }}
           >
-            Why was this not flagged?
+            {explaining ? "Generating explanation…" : "Why was this not flagged?"}
           </button>
           <button
             onClick={() => {

@@ -402,15 +402,33 @@ export async function fetchSimulationReplay(capacity: number): Promise<ReplayRes
   return apiFetch<ReplayResponse>(`/simulation/replay?capacity=${capacity}`);
 }
 
+export interface ClaimSearchResult {
+  claim_id: string;
+  provider_id: string;
+  claim_risk_tier: "high" | "medium" | "low";
+  amount_reimbursed: number;
+  rule_flags: string[];
+}
+
+export async function fetchClaimSearch(q: string): Promise<ClaimSearchResult[]> {
+  if (!q || q.length < 2) return [];
+  try {
+    return await apiFetch<ClaimSearchResult[]>(`/claims/search?q=${encodeURIComponent(q)}&limit=8`);
+  } catch {
+    return [];
+  }
+}
+
 /** POST /chat — general assistant with optional provider evidence context and conversation history. */
 export async function chatWithAssistant(
   message: string,
   providerIds: string[] = [],
   history: ChatHistoryMessage[] = [],
+  claimIds: string[] = [],
 ): Promise<string> {
   const data = await apiFetch<{ reply: string }>("/chat", {
     method: "POST",
-    body: JSON.stringify({ message, provider_ids: providerIds, history }),
+    body: JSON.stringify({ message, provider_ids: providerIds, history, claim_ids: claimIds }),
   });
   return data.reply;
 }

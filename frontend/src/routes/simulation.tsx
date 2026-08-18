@@ -492,9 +492,8 @@ function Simulation() {
   const [tickProgress, setTickProgress] = useState(0); // 0-1 within current tick
   const [tickerRows, setTickerRows] = useState<TickerRow[]>([]);
   const [crossings, setCrossings] = useState<ProviderCrossing[]>([]);
-  const [showIntro, setShowIntro] = useState(
-    () => !sessionStorage.getItem("sim_intro_shown"),
-  );
+  const [showIntro, setShowIntro] = useState(false);
+  const [lifted, setLifted] = useState(false);
 
   const startTimeRef = useRef(0);
   const pausedElapsedRef = useRef(0);
@@ -549,6 +548,13 @@ function Simulation() {
       beginPlaying();
     }
   }, [handleIntroDone, replayData, beginPlaying]);
+
+  // If data arrives after intro already finished, auto-start
+  useEffect(() => {
+    if (replayData && !showIntro && phase === "idle") {
+      beginPlaying();
+    }
+  }, [replayData, showIntro, phase, beginPlaying]);
 
   // Main timer loop
   useEffect(() => {
@@ -633,10 +639,12 @@ function Simulation() {
   const reset = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setPhase("idle");
+    setReplayData(null);
     setCurrentTick(0);
     setTickProgress(0);
     setTickerRows([]);
     setCrossings([]);
+    setLifted(false);
     pausedElapsedRef.current = 0;
     lastTickRef.current = 0;
     tickerClaimIdxRef.current = 0;
@@ -644,8 +652,8 @@ function Simulation() {
   }, []);
 
   const handleStart = useCallback(() => {
+    setLifted(true);
     if (replayData) {
-      // Already have data — just start playing
       setShowIntro(false);
       beginPlaying();
     } else {
@@ -673,26 +681,111 @@ function Simulation() {
   const isActive = phase === "playing" || phase === "paused" || phase === "complete";
   const currentBatchLabel = replayData?.batches[currentTick - 1]?.label ?? "";
 
+  // ── Shared controls (speed + capacity) ───────────────────────────────────
+  const sharedControls = (
+    <>
+      <div style={{ display: "flex", gap: 2, border: "1px solid rgba(30,41,59,0.15)", borderRadius: 6, overflow: "hidden" }}>
+        {([1, 2, 4] as Speed[]).map((s) => (
+          <button key={s} onClick={() => setSpeed(s)}
+            style={{
+              padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none",
+              background: speed === s ? "#161b2e" : "transparent",
+              color: speed === s ? "#fff" : "#667088",
+            }}>{s}x</button>
+        ))}
+      </div>
+      <div style={{ width: 1, height: 20, background: "rgba(30,41,59,0.12)", flexShrink: 0 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <label style={{ fontSize: 12, color: "#667088" }}>Capacity</label>
+        <input type="number" min={1} max={5000} value={capacity}
+          onChange={(e) => setCapacity(Math.max(1, parseInt(e.target.value) || 100))}
+          disabled={phase === "playing" || phase === "paused"}
+          style={{ width: 64, padding: "5px 8px", fontSize: 12, borderRadius: 5, fontFamily: "ui-monospace,monospace", border: "1px solid rgba(30,41,59,0.2)", background: "white", color: "#161b2e" }} />
+        <span style={{ fontSize: 12, color: "#667088" }}>/ week</span>
+      </div>
+    </>
+  );
+
+  // ── IDLE (centered hero) ──────────────────────────────────────────────────
+  if (!lifted) {
+    return (
+      <>
+        {showIntro && <SimulationLoadingIntro onDone={handleIntroDoneWithData} />}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100svh", padding: "0 32px" }}>
+          <h1 style={{ fontSize: 30, fontWeight: 700, color: "#161b2e", margin: 0, letterSpacing: "-0.02em", textAlign: "center" }}>
+            Claims Replay Simulation
+          </h1>
+          <p style={{ fontSize: 14, color: "#667088", maxWidth: 500, margin: "14px auto 0", lineHeight: 1.65, textAlign: "center" }}>
+            Replay 555,506 Medicare claims arriving over 2009 in six two-month batches. Four charts update in real time as claims are processed.
+          </p>
+
+          {/* Control card */}
+          <div style={{
+            marginTop: 36,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
+            background: "rgba(255,255,255,0.72)", backdropFilter: "blur(16px) saturate(180%)",
+            WebkitBackdropFilter: "blur(16px) saturate(180%)",
+            border: "1px solid rgba(255,255,255,0.82)", borderRadius: 18,
+            boxShadow: "0 8px 32px rgba(59,130,246,0.08)",
+            padding: "28px 36px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+              {sharedControls}
+            </div>
+            <button
+              onClick={handleStart}
+              style={{
+                background: "linear-gradient(135deg, #161b2e, #2563eb)", color: "#fff",
+                border: "none", borderRadius: 10, padding: "12px 40px",
+                fontSize: 15, fontWeight: 700, cursor: "pointer", letterSpacing: "0.01em",
+                boxShadow: "0 4px 18px rgba(37,99,235,0.35)",
+                transition: "transform 0.1s, box-shadow 0.1s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 22px rgba(37,99,235,0.45)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 18px rgba(37,99,235,0.35)"; }}
+            >
+              Start Replay
+            </button>
+          </div>
+
+          <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 18 }}>
+            {capacity} cases / week · {speed}x speed · ~{Math.round(TICK_MS[speed] * 6 / 1000)}s total run time
+          </p>
+        </div>
+        <style>{`
+          @keyframes tickerFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+          @keyframes crossingEntry { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
+          @keyframes completionExpand { from { opacity:0; transform:scaleY(0.95); transform-origin:top; } to { opacity:1; transform:scaleY(1); } }
+        `}</style>
+      </>
+    );
+  }
+
+  // ── LIFTED (sticky navbar + content) ─────────────────────────────────────
   return (
     <>
-      {/* Intro overlay — shown during loading */}
-      {showIntro && (phase === "loading" || (phase === "idle" && !replayData)) && (
-        <SimulationLoadingIntro onDone={handleIntroDoneWithData} />
-      )}
+      {showIntro && <SimulationLoadingIntro onDone={handleIntroDoneWithData} />}
 
       <div style={{ padding: "0 24px 64px" }}>
-        {/* ── Header ── */}
+        {/* Sticky navbar */}
         <div style={{
-          position: "sticky", top: 0, zIndex: 10, background: "rgba(248,250,252,0.95)",
-          backdropFilter: "blur(8px)", borderBottom: "1px solid rgba(30,41,59,0.08)",
-          padding: "10px 0", marginBottom: 16,
+          position: "sticky", top: 0, zIndex: 10,
+          background: "rgba(248,250,252,0.95)", backdropFilter: "blur(8px)",
+          borderBottom: "1px solid rgba(30,41,59,0.08)",
+          padding: "10px 16px 8px", marginBottom: 16,
+          animation: "navbarSlideDown 0.45s cubic-bezier(0.34,1.56,0.64,1)",
         }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-            {/* Control buttons */}
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {phase === "idle" && (
               <button onClick={handleStart}
                 style={{ background: "#161b2e", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                 Start replay
+              </button>
+            )}
+            {phase === "loading" && (
+              <button disabled
+                style={{ background: "#161b2e", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "default", opacity: 0.6 }}>
+                Loading…
               </button>
             )}
             {phase === "playing" && (
@@ -713,72 +806,39 @@ function Simulation() {
                 Run again
               </button>
             )}
-            {isActive && phase !== "complete" && (
+            {(isActive || phase === "idle") && phase !== "complete" && (
               <button onClick={reset}
                 style={{ background: "transparent", color: "#667088", border: "1px solid rgba(30,41,59,0.2)", borderRadius: 6, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>
                 Reset
               </button>
             )}
 
-            {/* Speed control */}
-            <div style={{ display: "flex", gap: 2, border: "1px solid rgba(30,41,59,0.15)", borderRadius: 6, overflow: "hidden" }}>
-              {([1, 2, 4] as Speed[]).map((s) => (
-                <button key={s} onClick={() => setSpeed(s)}
-                  style={{
-                    padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none",
-                    background: speed === s ? "#161b2e" : "transparent",
-                    color: speed === s ? "#fff" : "#667088",
-                  }}>{s}x</button>
-              ))}
-            </div>
-
-            {/* Capacity */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <label style={{ fontSize: 12, color: "#667088" }}>Capacity</label>
-              <input type="number" min={1} max={5000} value={capacity}
-                onChange={(e) => setCapacity(Math.max(1, parseInt(e.target.value) || 100))}
-                disabled={phase === "playing" || phase === "paused"}
-                style={{
-                  width: 64, padding: "5px 8px", fontSize: 12, borderRadius: 5, fontFamily: "ui-monospace,monospace",
-                  border: "1px solid rgba(30,41,59,0.2)", background: "white", color: "#161b2e",
-                }} />
-              <span style={{ fontSize: 12, color: "#667088" }}>/ week</span>
-            </div>
-
-            {/* Progress */}
-            {isActive && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-                <span style={{ fontSize: 12, color: "#667088", whiteSpace: "nowrap" }}>
-                  {phase === "complete" ? "Complete" : currentBatchLabel || `Tick ${currentTick} of ${TOTAL_TICKS}`}
-                </span>
-                <div style={{ width: 120, height: 4, background: "rgba(30,41,59,0.1)", borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%", borderRadius: 2, background: phase === "complete" ? "#059669" : "#3b82f6",
-                    width: `${Math.min(100, Math.round((phase === "complete" ? 1 : overallProgress) * 100))}%`,
-                    transition: "width 0.1s linear",
-                  }} />
-                </div>
-              </div>
-            )}
+            <div style={{ width: 1, height: 20, background: "rgba(30,41,59,0.12)", flexShrink: 0 }} />
+            {sharedControls}
           </div>
+
+          {isActive && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, marginTop: 8 }}>
+              <span style={{ fontSize: 12, color: "#667088", whiteSpace: "nowrap" }}>
+                {phase === "complete" ? "Complete ✓" : currentBatchLabel || `Batch ${currentTick} of ${TOTAL_TICKS}`}
+              </span>
+              <div style={{ width: 180, height: 4, background: "rgba(30,41,59,0.1)", borderRadius: 2, overflow: "hidden", flexShrink: 0 }}>
+                <div style={{
+                  height: "100%", borderRadius: 2, background: phase === "complete" ? "#059669" : "#3b82f6",
+                  width: `${Math.min(100, Math.round((phase === "complete" ? 1 : overallProgress) * 100))}%`,
+                  transition: "width 0.1s linear",
+                }} />
+              </div>
+              <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                {Math.min(100, Math.round((phase === "complete" ? 1 : overallProgress) * 100))}%
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Idle state */}
-        {phase === "idle" && !replayData && (
-          <div style={{ paddingTop: 40, textAlign: "center" }}>
-            <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e" }}>Claims replay simulation</h1>
-            <p style={{ fontSize: 13, color: "#667088", maxWidth: 480, margin: "8px auto 0" }}>
-              Replay 555,506 Medicare claims arriving over 2009 in six two-month batches. Four charts update in real time as claims are processed.
-            </p>
-            <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 12 }}>
-              {capacity} cases / week · {speed}x speed · ~{Math.round(TICK_MS[speed] * 6 / 1000)}s total run time
-            </p>
-          </div>
-        )}
-
-        {/* Active replay UI */}
+        {/* Active replay content */}
         {isActive && replayData && (
-          <>
+          <div style={{ animation: "contentFadeUp 0.4s ease-out 0.15s both" }}>
             <ClaimTicker rows={tickerRows} />
             <div style={{ marginTop: 12 }}>
               <ChartGrid batches={replayData.batches} upToTick={currentTick} />
@@ -787,34 +847,40 @@ function Simulation() {
             {phase === "complete" && (
               <CompletionPanel summary={replayData.final_summary} capacity={capacity} />
             )}
-          </>
+          </div>
         )}
 
         {/* Post-reset idle when data is already loaded */}
         {phase === "idle" && replayData && (
-          <div style={{ paddingTop: 24, textAlign: "center" }}>
+          <div style={{ paddingTop: 60, textAlign: "center" }}>
             <p style={{ fontSize: 13, color: "#667088" }}>
-              Ready to replay {replayData.final_summary.total_claims.toLocaleString()} claims at capacity {capacity}/week.
+              Ready to replay {replayData.final_summary.total_claims.toLocaleString()} claims at {capacity} cases/week.
             </p>
-            <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
-              Space to play · R to reset
-            </p>
+            <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>Space to play · R to reset</p>
           </div>
         )}
       </div>
 
       <style>{`
+        @keyframes navbarSlideDown {
+          from { opacity: 0; transform: translateY(-20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes contentFadeUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         @keyframes tickerFadeIn {
           from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
+          to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes crossingEntry {
           from { opacity: 0; transform: translateX(-8px); }
-          to { opacity: 1; transform: translateX(0); }
+          to   { opacity: 1; transform: translateX(0); }
         }
         @keyframes completionExpand {
           from { opacity: 0; transform: scaleY(0.95); transform-origin: top; }
-          to { opacity: 1; transform: scaleY(1); }
+          to   { opacity: 1; transform: scaleY(1); }
         }
       `}</style>
     </>

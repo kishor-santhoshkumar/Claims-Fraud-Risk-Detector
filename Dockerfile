@@ -29,6 +29,8 @@ COPY outputs/policy_chunks.jsonl         outputs/policy_chunks.jsonl
 COPY outputs/narratives.json             outputs/narratives.json
 COPY outputs/simulation_base.json        outputs/simulation_base.json
 COPY outputs/simulation_narrative.json   outputs/simulation_narrative.json
+COPY outputs/scored_claims.json          outputs/scored_claims.json
+COPY outputs/claim_score_index.json      outputs/claim_score_index.json
 
 # ── Build ChromaDB dense index ────────────────────────────────────────────────
 # This step also downloads and caches the ONNX embedding model inside the image,

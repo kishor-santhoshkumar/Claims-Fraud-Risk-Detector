@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCaseStore } from "@/lib/caseStore";
-import { chatWithAssistant, type ChatHistoryMessage } from "@/lib/api";
+import {
+  chatWithAssistant,
+  fetchClaimSearch,
+  type ChatHistoryMessage,
+  type ClaimSearchResult,
+} from "@/lib/api";
 
 export const Route = createFileRoute("/assistant")({
   component: Assistant,
@@ -14,9 +19,14 @@ interface Msg {
   error?: boolean;
 }
 
-/** Extract provider IDs from @mentions in a message. */
 function extractProviderIds(text: string): string[] {
   return [...text.matchAll(/@([A-Za-z0-9]+)/g)]
+    .map((m) => (m[1] ?? "").toUpperCase())
+    .filter(Boolean);
+}
+
+function extractClaimIds(text: string): string[] {
+  return [...text.matchAll(/#([A-Za-z0-9]+)/g)]
     .map((m) => (m[1] ?? "").toUpperCase())
     .filter(Boolean);
 }
@@ -24,7 +34,7 @@ function extractProviderIds(text: string): string[] {
 const INITIAL_MSG: Msg = {
   id: 0,
   role: "assistant",
-  text: "Ask me anything about the Medicare fraud review. Tag a provider with @ to include their evidence — for example: \"@PRV52985 why was this provider flagged?\"",
+  text: 'Ask me anything about Medicare fraud review.\n\n• Tag a provider with @PRVXXXXX to include their evidence — e.g. "@PRV52985 why was this flagged?"\n• Tag a claim with #CLMXXXXX to analyse that specific claim — e.g. "#CLM59355 what rule did this violate?"\n• Mix both in one message for cross-claim/provider analysis.',
 };
 
 function loadSession<T>(key: string, fallback: T): T {
@@ -34,6 +44,11 @@ function loadSession<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function TierDot({ tier }: { tier: string }) {
+  const color = tier === "high" ? "#ef4444" : tier === "medium" ? "#f59e0b" : "#10b981";
+  return <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: color, marginRight: 4, verticalAlign: "middle" }} />;
 }
 
 function Assistant() {
@@ -46,27 +61,54 @@ function Assistant() {
   const [sessionProviders, setSessionProviders] = useState<string[]>(() =>
     loadSession<string[]>("chat_session_providers", [])
   );
+  const [sessionClaims, setSessionClaims] = useState<string[]>(() =>
+    loadSession<string[]>("chat_session_claims", [])
+  );
+  const [claimSuggestions, setClaimSuggestions] = useState<ClaimSearchResult[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Persist to sessionStorage whenever state changes (survives tab switches, clears on refresh)
   useEffect(() => {
     try { sessionStorage.setItem("chat_messages", JSON.stringify(messages)); } catch {}
   }, [messages]);
-
   useEffect(() => {
     try { sessionStorage.setItem("chat_session_providers", JSON.stringify(sessionProviders)); } catch {}
   }, [sessionProviders]);
+  useEffect(() => {
+    try { sessionStorage.setItem("chat_session_claims", JSON.stringify(sessionClaims)); } catch {}
+  }, [sessionClaims]);
 
-  // Autocomplete suggestions when typing @...
-  const suggestions = useMemo(() => {
+  // Pick up pre-fill written by queue/claims "Ask" buttons
+  useEffect(() => {
+    try {
+      const prefill = sessionStorage.getItem("chat_prefill");
+      if (prefill) {
+        setInput(prefill);
+        sessionStorage.removeItem("chat_prefill");
+        inputRef.current?.focus();
+      }
+    } catch {}
+  }, []);
+
+  // Provider autocomplete (sync, from caseStore)
+  const providerSuggestions = useMemo(() => {
     const q = input.match(/@([A-Za-z0-9]*)$/);
     if (!q) return [];
     const term = (q[1] ?? "").toUpperCase();
-    return providers
-      .filter((p) => p.provider_id.includes(term))
-      .slice(0, 6);
+    return providers.filter((p) => p.provider_id.includes(term)).slice(0, 6);
   }, [input, providers]);
+
+  // Claim autocomplete (async, from backend)
+  useEffect(() => {
+    const q = input.match(/#([A-Za-z0-9]{2,})$/);
+    if (!q) { setClaimSuggestions([]); return; }
+    const term = q[1] ?? "";
+    let cancelled = false;
+    const tid = setTimeout(() => {
+      fetchClaimSearch(term).then((r) => { if (!cancelled) setClaimSuggestions(r); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(tid); };
+  }, [input]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -76,10 +118,9 @@ function Assistant() {
     e.preventDefault();
     const text = input.trim();
     if (!text || pending) return;
-
     setInput("");
+    setClaimSuggestions([]);
 
-    // Snapshot history before adding the new user message (skip initial greeting + errors)
     const history: ChatHistoryMessage[] = messages
       .filter((m) => m.id !== 0 && !m.error)
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.text }));
@@ -88,13 +129,15 @@ function Assistant() {
     setMessages((m) => [...m, userMsg]);
     setPending(true);
 
-    // Merge new @mentions with all providers seen so far this session
-    const newIds = extractProviderIds(text);
-    const allProviderIds = Array.from(new Set([...sessionProviders, ...newIds]));
-    if (newIds.length > 0) setSessionProviders(allProviderIds);
+    const newProviderIds = extractProviderIds(text);
+    const newClaimIds = extractClaimIds(text);
+    const allProviderIds = Array.from(new Set([...sessionProviders, ...newProviderIds]));
+    const allClaimIds = Array.from(new Set([...sessionClaims, ...newClaimIds]));
+    if (newProviderIds.length > 0) setSessionProviders(allProviderIds);
+    if (newClaimIds.length > 0) setSessionClaims(allClaimIds);
 
     try {
-      const reply = await chatWithAssistant(text, allProviderIds, history);
+      const reply = await chatWithAssistant(text, allProviderIds, history, allClaimIds);
       setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", text: reply }]);
     } catch {
       setMessages((m) => [
@@ -111,22 +154,26 @@ function Assistant() {
     }
   };
 
+  const hasSuggestions = providerSuggestions.length > 0 || claimSuggestions.length > 0;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100svh" }}>
       <header style={{ padding: "16px 24px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderBottom: "1px solid rgba(255,255,255,0.75)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Case assistant</h1>
           <p style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)", marginBottom: 0 }}>
-            Ask general questions or tag a provider with @PRVXXXXX to get evidence-grounded answers
+            @PROVIDER for evidence context · #CLAIM for claim-level analysis · mix freely
           </p>
         </div>
         <button
           onClick={() => {
             setMessages([INITIAL_MSG]);
             setSessionProviders([]);
+            setSessionClaims([]);
             try {
               sessionStorage.removeItem("chat_messages");
               sessionStorage.removeItem("chat_session_providers");
+              sessionStorage.removeItem("chat_session_claims");
             } catch {}
           }}
           style={{ height: 34, padding: "0 14px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.07)", color: "#dc2626", fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", transition: "background 0.15s, border-color 0.15s", whiteSpace: "nowrap" }}
@@ -164,9 +211,9 @@ function Assistant() {
 
       <form onSubmit={send} style={{ padding: "12px 24px 16px", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", background: "linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(228,231,253,0.5) 100%)", borderTop: "1px solid rgba(255,255,255,0.75)" }}>
         <div style={{ maxWidth: 640, margin: "0 auto" }}>
-          {suggestions.length > 0 && (
+          {hasSuggestions && (
             <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {suggestions.map((p) => (
+              {providerSuggestions.map((p) => (
                 <button
                   key={p.provider_id}
                   type="button"
@@ -174,10 +221,28 @@ function Assistant() {
                     setInput((v) => v.replace(/@([A-Za-z0-9]*)$/, `@${p.provider_id} `));
                     inputRef.current?.focus();
                   }}
-                  style={{ padding: "2px 8px", fontFamily: "ui-monospace,monospace", fontSize: 12, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 6, color: "var(--text-secondary)", cursor: "pointer" }}
+                  style={{ padding: "2px 8px", fontFamily: "ui-monospace,monospace", fontSize: 12, background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)", borderRadius: 6, color: "#1d4ed8", cursor: "pointer" }}
                 >
-                  {p.provider_id}
-                  <span style={{ marginLeft: 6, color: "var(--text-faint)" }}>{p.risk_tier}</span>
+                  @{p.provider_id}
+                  <span style={{ marginLeft: 5, color: "#667088", fontFamily: "inherit" }}>{p.risk_tier}</span>
+                </button>
+              ))}
+              {claimSuggestions.map((c) => (
+                <button
+                  key={c.claim_id}
+                  type="button"
+                  onClick={() => {
+                    setInput((v) => v.replace(/#([A-Za-z0-9]*)$/, `#${c.claim_id} `));
+                    inputRef.current?.focus();
+                  }}
+                  style={{ padding: "2px 8px", fontFamily: "ui-monospace,monospace", fontSize: 12, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 6, color: "#92400e", cursor: "pointer" }}
+                >
+                  <TierDot tier={c.claim_risk_tier} />
+                  #{c.claim_id}
+                  <span style={{ marginLeft: 5, color: "#667088", fontFamily: "inherit" }}>${(c.amount_reimbursed / 1000).toFixed(0)}K</span>
+                  {c.rule_flags.length > 0 && (
+                    <span style={{ marginLeft: 5, color: "#dc2626", fontFamily: "inherit" }}>⚑</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -187,7 +252,7 @@ function Assistant() {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder='Ask anything, or "@PRV52985 why was this flagged?"'
+              placeholder='Ask anything · @PRV52985 provider context · #CLM59355 claim analysis'
               style={{ flex: 1, height: 40, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 10, padding: "0 12px", fontSize: 13, fontFamily: "inherit", color: "var(--text-primary)", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
               onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.12)"; }}
               onBlur={(e) => { e.target.style.borderColor = "rgba(100,116,139,0.22)"; e.target.style.boxShadow = "none"; }}
@@ -200,6 +265,17 @@ function Assistant() {
               Send
             </button>
           </div>
+          {(sessionProviders.length > 0 || sessionClaims.length > 0) && (
+            <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Session context:</span>
+              {sessionProviders.map((id) => (
+                <span key={id} style={{ padding: "1px 6px", fontFamily: "ui-monospace,monospace", fontSize: 11, background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 4, color: "#3b82f6" }}>@{id}</span>
+              ))}
+              {sessionClaims.map((id) => (
+                <span key={id} style={{ padding: "1px 6px", fontFamily: "ui-monospace,monospace", fontSize: 11, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 4, color: "#b45309" }}>#{id}</span>
+              ))}
+            </div>
+          )}
         </div>
       </form>
     </div>

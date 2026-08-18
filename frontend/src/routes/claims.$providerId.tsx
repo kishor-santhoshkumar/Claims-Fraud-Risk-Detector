@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchClaims, type Claim } from "@/lib/api";
 import { useCaseStore } from "@/lib/caseStore";
@@ -173,7 +173,20 @@ function WhyFlagged({ claim }: { claim: Claim }) {
 
 function ClaimsPage() {
   const { providerId } = Route.useParams();
+  const navigate = useNavigate();
   const { providers } = useCaseStore();
+
+  const askAboutClaim = (claimId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      sessionStorage.setItem("chat_prefill", `#${claimId} `);
+      // Also seed the session claims so context is already there
+      const prev: string[] = JSON.parse(sessionStorage.getItem("chat_session_claims") ?? "[]");
+      const next = Array.from(new Set([...prev, claimId]));
+      sessionStorage.setItem("chat_session_claims", JSON.stringify(next));
+    } catch {}
+    navigate({ to: "/assistant" });
+  };
   const provider = providers.find((p) => p.provider_id === providerId);
 
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -352,6 +365,7 @@ function ClaimsPage() {
                 {header("attending_physician", "Attending")}
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dx</th>
                 {header("claim_risk_score", "Risk", "right")}
+                <th className="px-3 py-2 font-medium text-muted-foreground"></th>
               </tr>
             </thead>
             <tbody>
@@ -392,10 +406,20 @@ function ClaimsPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+                    <td className="px-3 py-2">
+                      <button
+                        onClick={(e) => askAboutClaim(c.claim_id, e)}
+                        style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.06)", color: "#1d4ed8", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.14)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.06)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)"; }}
+                      >
+                        Ask
+                      </button>
+                    </td>
                   </tr>
                   {expanded === c.claim_id && (
                     <tr className="border-b border-border bg-muted/40">
-                      <td colSpan={8} className="px-3 py-3">
+                      <td colSpan={9} className="px-3 py-3">
                         <dl className="grid grid-cols-1 gap-2 text-[12px] sm:grid-cols-2">
                           <div>
                             <dt className="text-muted-foreground">Beneficiary</dt>

@@ -72,11 +72,11 @@ function LoginPage() {
             }}>
               <Shield size={24} color="#fff" />
             </div>
-            <h1 style={{ fontSize: 26, fontWeight: 600, color: "#161b2e", margin: 0, letterSpacing: "-0.01em" }}>
-              Payment Integrity
-            </h1>
-            <p style={{ fontSize: 14, color: "#667088", letterSpacing: "0.04em", marginTop: 6, marginBottom: 0 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: "#161b2e", margin: 0, letterSpacing: "-0.01em" }}>
               Claims Fraud Risk Detector
+            </h1>
+            <p style={{ fontSize: 13, color: "#667088", letterSpacing: "0.02em", marginTop: 6, marginBottom: 0 }}>
+              Medicare fraud investigation platform
             </p>
           </div>
 

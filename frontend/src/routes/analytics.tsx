@@ -116,6 +116,17 @@ function Analytics() {
   const scatterMedium = useMemo(() => providers.filter(p => p.risk_tier === "medium").map(p => ({ x: p.score, y: p.expected_loss })), [providers]);
   const scatterLow    = useMemo(() => providers.filter(p => p.risk_tier === "low").map(p => ({ x: p.score, y: p.expected_loss })), [providers]);
 
+  const maxExpLoss = useMemo(() => Math.max(...providers.map(p => p.expected_loss), 1), [providers]);
+  const [scatterYMax, setScatterYMax] = useState<number | null>(null); // null = full view
+
+  const ZOOM_PRESETS = useMemo(() => [
+    { label: "Full", value: null },
+    { label: "$1M",  value: 1_000_000 },
+    { label: "$500K", value: 500_000 },
+    { label: "$200K", value: 200_000 },
+    { label: "$100K", value: 100_000 },
+  ].filter(p => p.value === null || p.value < maxExpLoss), [maxExpLoss]);
+
   // Radar data: one row per axis, values for high and low tiers
   const radarData = useMemo(() => {
     if (!fingerprint) return [];
@@ -195,39 +206,70 @@ function Analytics() {
         </Panel>
 
         {/* Scatter — score vs expected loss */}
-        <Panel title="Score vs expected loss">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
-              <CartesianGrid stroke={GRID} strokeWidth={0.8} />
-              <XAxis
-                dataKey="x"
-                type="number"
-                domain={[0, 1]}
-                {...AXIS}
-                label={{ value: "fraud score", position: "insideBottom", offset: -2, fontSize: 10, fill: "#9ca3af" }}
-              />
-              <YAxis
-                dataKey="y"
-                type="number"
-                {...AXIS}
-                tickFormatter={(v: number) => formatMoneyShort(v)}
-                width={52}
-              />
-              <ZAxis range={[18, 18]} />
-              <Tooltip
-                cursor={{ strokeDasharray: "3 3" }}
-                contentStyle={{ borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number, name: string) =>
-                  name === "y" ? [formatMoneyShort(v), "Expected loss"] : [v.toFixed(3), "Score"]
-                }
-              />
-              <Legend iconType="circle" iconSize={8} formatter={(v) => <span style={{ fontSize: 12 }}>{v}</span>} />
-              <Scatter name="High"   data={scatterHigh}   fill={HIGH}   fillOpacity={0.55} />
-              <Scatter name="Medium" data={scatterMedium} fill={MEDIUM} fillOpacity={0.55} />
-              <Scatter name="Low"    data={scatterLow}    fill={LOW}    fillOpacity={0.40} />
-            </ScatterChart>
-          </ResponsiveContainer>
-        </Panel>
+        <section className="glass-panel">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            <h2 className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)", margin: 0 }}>
+              Score vs expected loss
+            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {/* Zoom presets */}
+              {ZOOM_PRESETS.map((p) => {
+                const active = scatterYMax === p.value;
+                return (
+                  <button
+                    key={p.label}
+                    onClick={() => setScatterYMax(p.value)}
+                    style={{
+                      height: 24, padding: "0 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
+                      fontFamily: "inherit", cursor: "pointer",
+                      border: active ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(100,116,139,0.22)",
+                      background: active ? "rgba(59,130,246,0.14)" : "rgba(255,255,255,0.5)",
+                      color: active ? "#1d4ed8" : "var(--text-muted)",
+                      transition: "background 0.15s, color 0.15s",
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                <CartesianGrid stroke={GRID} strokeWidth={0.8} />
+                <XAxis
+                  dataKey="x"
+                  type="number"
+                  domain={[0, 1]}
+                  {...AXIS}
+                  label={{ value: "fraud score", position: "insideBottom", offset: -2, fontSize: 10, fill: "#9ca3af" }}
+                />
+                <YAxis
+                  dataKey="y"
+                  type="number"
+                  domain={[0, scatterYMax ?? "auto"]}
+                  allowDataOverflow={!!scatterYMax}
+                  {...AXIS}
+                  tickFormatter={(v: number) => formatMoneyShort(v)}
+                  width={56}
+                />
+                <ZAxis range={[18, 18]} />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: number, name: string) =>
+                    name === "y" ? [formatMoneyShort(v), "Expected loss"] : [v.toFixed(3), "Score"]
+                  }
+                />
+                <Legend iconType="circle" iconSize={8} formatter={(v) => <span style={{ fontSize: 12 }}>{v}</span>} />
+                <Scatter name="High"   data={scatterHigh}   fill={HIGH}   fillOpacity={0.55} />
+                <Scatter name="Medium" data={scatterMedium} fill={MEDIUM} fillOpacity={0.55} />
+                <Scatter name="Low"    data={scatterLow}    fill={LOW}    fillOpacity={0.40} />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
         {/* Radar — signal fingerprint */}
         <Panel title="Signal fingerprint — high vs low risk">

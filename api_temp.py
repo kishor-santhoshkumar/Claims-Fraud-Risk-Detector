@@ -56,8 +56,9 @@ from src.export import (  # noqa: E402
     _risk_tier,
     _build_shap_evidence,
 )
-from src.evidence_assembler import assemble  # noqa: E402
+from src.evidence_assembler import assemble, assemble_clearance  # noqa: E402
 from src.narrator import narrate_case, narrate_clearance, narrate_simulation  # noqa: E402
+from src.retrieval import retrieve_for_rule  # noqa: E402
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -589,7 +590,7 @@ def why_not_flagged_post(provider_id: str):
             ),
         )
 
-    enriched = assemble(p)
+    enriched = assemble_clearance(p)
     from src.narrator import _load_cache
     cache = _load_cache()
     cache_key = f"clearance_{provider_id}"
@@ -1306,6 +1307,7 @@ class HistoryMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     provider_ids: list[str] = []
+    claim_ids: list[str] = []
     history: list[HistoryMessage] = []
 
 
@@ -1313,17 +1315,49 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class ClaimSearchResult(BaseModel):
+    claim_id: str
+    provider_id: str
+    claim_risk_tier: str
+    amount_reimbursed: float
+    rule_flags: list[str]
+
+@app.get("/claims/search", response_model=list[ClaimSearchResult], summary="Search claims by ID prefix")
+def search_claims(q: str = Query("", min_length=1), limit: int = Query(10, ge=1, le=30)):
+    """Search scored claims by claim_id prefix. Used by the chat UI autocomplete for # tags."""
+    _, index = _load_claim_data()
+    q_upper = q.upper()
+    results = []
+    for claim_id, v in index.items():
+        if claim_id.startswith(q_upper):
+            results.append(ClaimSearchResult(
+                claim_id=claim_id,
+                provider_id=v.get("provider_id", ""),
+                claim_risk_tier=v.get("claim_risk_tier", "low"),
+                amount_reimbursed=v.get("amount_reimbursed", 0.0),
+                rule_flags=v.get("rule_flags", []),
+            ))
+            if len(results) >= limit:
+                break
+    return results
+
+
 _CHAT_SYSTEM = (
-    "You are a Medicare fraud investigation assistant helping reviewers understand provider cases.\n"
-    "Use short sentences and plain, everyday English — the reviewers are not medical experts.\n\n"
-    "If provider evidence is given in the context, base your answer on that evidence only.\n"
-    "If no provider context is given, answer general questions about Medicare fraud investigation.\n\n"
-    "Rules:\n"
-    "- Never state a provider committed fraud — describe what the records show.\n"
-    "- Never mention a score, probability, or risk tier number.\n"
-    "- If a policy citation appears in the evidence, mention it by its citation string.\n"
-    "- Do not invent findings that are not in the evidence.\n"
-    "- Keep your reply under 200 words."
+    "You are a Medicare fraud investigation assistant. You help reviewers understand both "
+    "provider-level patterns and individual claim findings.\n\n"
+    "You receive two types of tagged context:\n"
+    "  @PROVIDER — billing-pattern evidence (SHAP features, rule violations, policy citations)\n"
+    "  #CLAIM    — individual claim details (dates, amounts, rule flags, z-scores vs peers)\n\n"
+    "Rules you must follow:\n"
+    "- Always give a substantive answer. If the requested data is not in the context, explain "
+    "what IS available and offer to analyse that instead. Never say 'I cannot answer'.\n"
+    "- Never state a provider or beneficiary committed fraud — describe what the records show.\n"
+    "- Never mention a numeric risk score, probability, or tier label directly.\n"
+    "- When a policy citation appears (e.g. 'Medicare PIM Ch.4 §4.3.1'), reference it by name.\n"
+    "- z-scores: within_z measures how anomalous the claim is within the same provider's own "
+    "billing pattern; cross_z measures it against all providers nationally.\n"
+    "- Cross-reference provider and claim data when both are provided.\n"
+    "- Keep replies under 250 words unless a detailed breakdown is explicitly requested."
 )
 
 
@@ -1332,28 +1366,104 @@ def chat_assistant(body: ChatRequest):
     """General-purpose chat assistant with multi-turn conversation history.
 
     Pass provider_ids to include their evidence as context (extracted from @mentions in the UI).
+    Pass claim_ids to include individual claim context (extracted from #mentions in the UI).
     Pass history as [{role, content}] pairs for conversational continuity within a session.
     Returns 503 if all Groq keys are rate-limited.
     """
     from src.narrator import _call_groq_messages, _MODEL_MEDIUM
+    from src.claim_scorer import RULES as CLAIM_RULES
 
-    # Build evidence context for each mentioned provider (cap at 3)
+    rule_citations = {r["id"]: r["citation"] for r in CLAIM_RULES}
     context_blocks: list[str] = []
+
+    # ── Provider context (@mentions) ──────────────────────────────────────────
     for pid in body.provider_ids[:3]:
         p = _PROVIDERS.get(pid.upper())
         if not p:
+            context_blocks.append(f"Provider @{pid}: not found in scored dataset.")
             continue
         enriched = assemble(p)
         lines = [f"  [{e.type.upper()}] {e.summary}" for e in enriched.evidence]
-        block = f"Provider {pid} ({p.risk_tier} risk tier, {p.n_claims} claims):\n" + "\n".join(lines)
+        block = (
+            f"Provider @{pid} ({p.risk_tier} risk, {p.n_claims} claims, "
+            f"${p.total_reimbursed:,.0f} reimbursed):\n" + "\n".join(lines)
+        )
         context_blocks.append(block)
 
+    # ── Claim context (#mentions) ─────────────────────────────────────────────
+    if body.claim_ids:
+        top, index = _load_claim_data()
+        top_by_id = {r["claim_id"]: r for r in top}
+
+        for cid in body.claim_ids[:5]:
+            cid_upper = cid.upper()
+            record = top_by_id.get(cid_upper)
+            compact = index.get(cid_upper)
+
+            if record is None and compact is None:
+                context_blocks.append(f"Claim #{cid}: not found in scored claims dataset.")
+                continue
+
+            if record:
+                stay_days = ""
+                if record.get("admission_dt") and record.get("discharge_dt"):
+                    try:
+                        from datetime import date as _date
+                        a = _date.fromisoformat(record["admission_dt"])
+                        d = _date.fromisoformat(record["discharge_dt"])
+                        stay_days = f", {(d - a).days}-day stay"
+                    except Exception:
+                        pass
+                flags = record.get("rule_flags", [])
+                diag = ", ".join(record.get("diagnosis_codes", [])[:5])
+                proc = ", ".join(record.get("procedure_codes", [])[:3])
+                lines = [
+                    f"  Type: {record['claim_type']}{stay_days}",
+                    f"  Dates: {record.get('claim_start_dt', '?')} → {record.get('claim_end_dt', '?')}",
+                    f"  Amount: ${record['amount_reimbursed']:,.2f}  Deductible: ${record.get('deductible_paid', 0):,.2f}",
+                    f"  Provider: @{record['provider_id']}  Beneficiary: {record['bene_id']}",
+                ]
+                if record.get("attending_physician"):
+                    lines.append(f"  Attending physician: {record['attending_physician']}")
+                if diag:
+                    lines.append(f"  Diagnosis codes: {diag}")
+                if proc:
+                    lines.append(f"  Procedure codes: {proc}")
+                lines.append(f"  Within-provider z-score: {record.get('within_z', 0):.2f}  Cross-provider z-score: {record.get('cross_z', 0):.2f}")
+                if flags:
+                    flag_lines = []
+                    for flag in flags:
+                        cite = rule_citations.get(flag, "")
+                        flag_lines.append(f"    • {flag}: {cite}")
+                        # RAG: retrieve policy chunk for this rule
+                        chunks = retrieve_for_rule(flag, f"{flag} {cite}")
+                        if chunks:
+                            c = chunks[0]
+                            flag_lines.append(f"      Policy: {c['citation_string']} — {c['section_title']}")
+                    lines.append("  Rule violations:\n" + "\n".join(flag_lines))
+                else:
+                    lines.append("  Rule violations: none triggered")
+                block = f"Claim #{cid_upper}:\n" + "\n".join(lines)
+            else:
+                # Compact index only
+                flags = compact.get("rule_flags", [])
+                flag_str = ", ".join(f"{f} ({rule_citations.get(f, '')})" for f in flags) if flags else "none"
+                block = (
+                    f"Claim #{cid_upper} (summary only):\n"
+                    f"  Provider: @{compact.get('provider_id', '?')}\n"
+                    f"  Amount: ${compact.get('amount_reimbursed', 0):,.2f}\n"
+                    f"  Within-provider z-score: {compact.get('within_z', 0):.2f}  Cross-provider z-score: {compact.get('cross_z', 0):.2f}\n"
+                    f"  Rule violations: {flag_str}"
+                )
+            context_blocks.append(block)
+
+    # ── Assemble prompt ───────────────────────────────────────────────────────
     if context_blocks:
-        user_prompt = "Provider context:\n\n" + "\n\n".join(context_blocks) + f"\n\nQuestion: {body.message}"
+        context_section = "\n\n".join(context_blocks)
+        user_prompt = f"Context:\n\n{context_section}\n\nQuestion: {body.message}"
     else:
         user_prompt = body.message
 
-    # Build full messages array: system + prior history (capped) + current turn
     messages: list[dict] = [{"role": "system", "content": _CHAT_SYSTEM}]
     for h in body.history[-20:]:
         messages.append({"role": h.role, "content": h.content})
@@ -1361,10 +1471,7 @@ def chat_assistant(body: ChatRequest):
 
     result = _call_groq_messages(messages, _MODEL_MEDIUM)
     if result is None:
-        raise HTTPException(
-            status_code=503,
-            detail="LLM service temporarily unavailable. Try again in a moment.",
-        )
+        raise HTTPException(status_code=503, detail="LLM service temporarily unavailable. Try again in a moment.")
     return ChatResponse(reply=result)
 
 

@@ -8,7 +8,7 @@ export const Route = createFileRoute("/queue")({
   component: QueuePage,
 });
 
-type FilterTab = "flagged" | "high" | "medium" | "all";
+type FilterTab = "flagged" | "high" | "medium" | "all" | "confirmed" | "cleared";
 type GroupBy = "none" | "risk" | "state" | "reimbursed";
 type SortDir = "desc" | "asc";
 
@@ -96,7 +96,7 @@ const PAGE = 100;
 function QueuePage() {
   const navigate = useNavigate();
   const { providers, loading, error, setStatus } = useCaseStore();
-  const [filterTab, setFilterTab] = useState<FilterTab>("flagged");
+  const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchInput, setSearchInput] = useState("");
@@ -111,19 +111,23 @@ function QueuePage() {
   );
 
   const filtered = useMemo(() => {
-    if (filterTab === "flagged") return sorted.filter(p => p.risk_tier !== "low");
-    if (filterTab === "high") return sorted.filter(p => p.risk_tier === "high");
-    if (filterTab === "medium") return sorted.filter(p => p.risk_tier === "medium");
+    if (filterTab === "flagged")   return sorted.filter(p => p.risk_tier !== "low" && p.status === "unreviewed");
+    if (filterTab === "high")      return sorted.filter(p => p.risk_tier === "high" && p.status === "unreviewed");
+    if (filterTab === "medium")    return sorted.filter(p => p.risk_tier === "medium" && p.status === "unreviewed");
+    if (filterTab === "confirmed") return sorted.filter(p => p.status === "confirmed");
+    if (filterTab === "cleared")   return sorted.filter(p => p.status === "cleared");
     return sorted;
   }, [sorted, filterTab]);
 
   const sections = useMemo(() => buildSections(filtered, groupBy, sortDir), [filtered, groupBy, sortDir]);
 
   const counts = useMemo(() => ({
-    flagged: sorted.filter(p => p.risk_tier !== "low").length,
-    high: sorted.filter(p => p.risk_tier === "high").length,
-    medium: sorted.filter(p => p.risk_tier === "medium").length,
-    all: sorted.length,
+    flagged:   sorted.filter(p => p.risk_tier !== "low" && p.status === "unreviewed").length,
+    high:      sorted.filter(p => p.risk_tier === "high" && p.status === "unreviewed").length,
+    medium:    sorted.filter(p => p.risk_tier === "medium" && p.status === "unreviewed").length,
+    all:       sorted.length,
+    confirmed: sorted.filter(p => p.status === "confirmed").length,
+    cleared:   sorted.filter(p => p.status === "cleared").length,
   }), [sorted]);
 
   const decide = (p: CaseProvider, status: CaseStatus) => {
@@ -133,11 +137,28 @@ function QueuePage() {
     });
   };
 
+  const undo = (p: CaseProvider) => {
+    setStatus(p.provider_id, "unreviewed");
+    toast(`${p.provider_id} moved back to unreviewed`, {
+      action: { label: "Redo", onClick: () => setStatus(p.provider_id, p.status as CaseStatus) },
+    });
+  };
+
   const openProvider = (p: CaseProvider) => {
     navigate({
       to: p.risk_tier === "low" ? "/clearance/$providerId" : "/case/$providerId",
       params: { providerId: p.provider_id },
     });
+  };
+
+  const askAboutProvider = (p: CaseProvider, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      sessionStorage.setItem("chat_prefill", `@${p.provider_id} `);
+      const prev: string[] = JSON.parse(sessionStorage.getItem("chat_session_providers") ?? "[]");
+      sessionStorage.setItem("chat_session_providers", JSON.stringify(Array.from(new Set([...prev, p.provider_id]))));
+    } catch {}
+    navigate({ to: "/assistant" });
   };
 
   const submitSearch = (e: React.FormEvent) => {
@@ -170,11 +191,12 @@ function QueuePage() {
     );
   }
 
-  const filterTabs: { id: FilterTab; label: string; count: number }[] = [
-    { id: "flagged", label: "High + Medium", count: counts.flagged },
-    { id: "high",    label: "High Only",     count: counts.high },
-    { id: "medium",  label: "Medium Only",   count: counts.medium },
-    { id: "all",     label: "All Providers", count: counts.all },
+  const filterTabs: { id: FilterTab; label: string; count: number; accent?: string }[] = [
+    { id: "all",       label: "All Providers",   count: counts.all },
+    { id: "high",      label: "High Only",       count: counts.high },
+    { id: "medium",    label: "Medium Only",     count: counts.medium },
+    { id: "confirmed", label: "Confirmed Fraud", count: counts.confirmed, accent: "#ef4444" },
+    { id: "cleared",   label: "Cleared",         count: counts.cleared,   accent: "#10b981" },
   ];
 
   return (
@@ -206,22 +228,26 @@ function QueuePage() {
         {/* Filter tabs + group by */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingBottom: 14 }}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {filterTabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setFilterTab(t.id)}
-                style={{
-                  height: 30, padding: "0 12px", borderRadius: 999,
-                  border: filterTab === t.id ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(100,116,139,0.22)",
-                  background: filterTab === t.id ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.5)",
-                  color: filterTab === t.id ? "#1d4ed8" : "var(--text-muted)",
-                  fontSize: 12, fontWeight: 500, fontFamily: "inherit", cursor: "pointer",
-                  transition: "background 0.15s, color 0.15s",
-                }}
-              >
-                {t.label}&nbsp;<span style={{ opacity: 0.65 }}>({t.count.toLocaleString()})</span>
-              </button>
-            ))}
+            {filterTabs.map((t) => {
+              const active = filterTab === t.id;
+              const color = t.accent ?? "#3b82f6";
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setFilterTab(t.id)}
+                  style={{
+                    height: 30, padding: "0 12px", borderRadius: 999,
+                    border: active ? `1px solid ${color}60` : "1px solid rgba(100,116,139,0.22)",
+                    background: active ? `${color}20` : "rgba(255,255,255,0.5)",
+                    color: active ? color : "var(--text-muted)",
+                    fontSize: 12, fontWeight: 500, fontFamily: "inherit", cursor: "pointer",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  {t.label}&nbsp;<span style={{ opacity: 0.65 }}>({t.count.toLocaleString()})</span>
+                </button>
+              );
+            })}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 12, color: "var(--text-faint)" }}>Group by</span>
@@ -307,9 +333,12 @@ function QueuePage() {
 
               <div className="glass-card" style={{ overflow: "hidden" }}>
                 {/* Column headers */}
-                <div style={{ display: "grid", gridTemplateColumns: "40px 110px 70px 1fr 90px 110px 100px", gap: 10, padding: "7px 16px", background: "rgba(248,250,255,0.5)", borderBottom: "1px solid rgba(30,41,59,0.07)" }}>
-                  {["#", "Provider ID", "Tier", "State", "Score", "Exp. Loss", "Claims"].map(h => (
-                    <span key={h} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-faint)" }}>{h}</span>
+                <div style={{ display: "grid", gridTemplateColumns: "40px 110px 70px 1fr 90px 110px 100px 60px 90px", gap: 10, padding: "7px 16px", background: "rgba(248,250,255,0.5)", borderBottom: "1px solid rgba(30,41,59,0.07)" }}>
+                  {([
+                    ["#", "left"], ["Provider ID", "left"], ["Tier", "left"], ["State", "left"],
+                    ["Score", "left"], ["Exp. Loss", "right"], ["Claims", "right"], ["", "left"], ["", "left"],
+                  ] as [string, string][]).map(([h, align], idx) => (
+                    <span key={idx} style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-faint)", textAlign: align as "left" | "right" }}>{h}</span>
                   ))}
                 </div>
 
@@ -319,7 +348,7 @@ function QueuePage() {
                     onClick={() => openProvider(p)}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "40px 110px 70px 1fr 90px 110px 100px",
+                      gridTemplateColumns: "40px 110px 70px 1fr 90px 110px 100px 60px 90px",
                       alignItems: "center",
                       gap: 10,
                       padding: "9px 16px",
@@ -339,6 +368,24 @@ function QueuePage() {
                     <span style={{ fontFamily: "ui-monospace,monospace", fontVariantNumeric: "tabular-nums" }}>{p.score.toFixed(4)}</span>
                     <span style={{ fontFamily: "ui-monospace,monospace", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{formatMoneyShort(p.expected_loss)}</span>
                     <span style={{ color: "var(--text-faint)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{p.n_claims.toLocaleString()}</span>
+                    <button
+                      onClick={(e) => askAboutProvider(p, e)}
+                      style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.06)", color: "#1d4ed8", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.14)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.06)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)"; }}
+                    >
+                      Ask
+                    </button>
+                    {(p.status === "confirmed" || p.status === "cleared") && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); undo(p); }}
+                        style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(100,116,139,0.22)", background: "none", color: "var(--text-faint)", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#f59e0b"; e.currentTarget.style.color = "#b45309"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(100,116,139,0.22)"; e.currentTarget.style.color = "var(--text-faint)"; }}
+                      >
+                        Undo
+                      </button>
+                    )}
                   </div>
                 ))}
 

@@ -3,12 +3,12 @@ import { BarChart3, LayoutDashboard, ListChecks, LogOut, MessageSquare, Settings
 import { logout } from "@/lib/auth";
 
 const items = [
-  { to: "/",           label: "Dashboard", icon: LayoutDashboard },
-  { to: "/queue",      label: "Queue",     icon: ListChecks },
-  { to: "/assistant",  label: "Assistant", icon: MessageSquare },
-  { to: "/analytics",  label: "Analytics", icon: BarChart3 },
-  { to: "/simulation", label: "Simulation",icon: SlidersHorizontal },
-  { to: "/settings",   label: "Settings",  icon: Settings },
+  { to: "/",           label: "Dashboard",       icon: LayoutDashboard },
+  { to: "/queue",      label: "Queue",            icon: ListChecks },
+  { to: "/assistant",  label: "Assistant",        icon: MessageSquare },
+  { to: "/analytics",  label: "Analytics",        icon: BarChart3 },
+  { to: "/simulation", label: "Simulation",       icon: SlidersHorizontal },
+  { to: "/settings",   label: "Settings",         icon: Settings },
 ];
 
 const SIDEBAR_STYLE: React.CSSProperties = {
@@ -44,7 +44,7 @@ export function AppSidebar() {
           <ShieldCheck size={15} color="#fff" strokeWidth={2} />
         </div>
         <span className="hidden md:inline" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          Payment Integrity
+          Claims Fraud Risk Detector
         </span>
       </div>
 

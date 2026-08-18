@@ -33,11 +33,27 @@ interface CaseStoreValue {
 
 const CaseStoreContext = createContext<CaseStoreValue | null>(null);
 
+const STATUSES_KEY = "case_statuses";
+
+function loadStatuses(): Record<string, CaseStatus> {
+  try {
+    return JSON.parse(localStorage.getItem(STATUSES_KEY) ?? "{}") as Record<string, CaseStatus>;
+  } catch {
+    return {};
+  }
+}
+
 export function CaseStoreProvider({ children }: { children: ReactNode }) {
   const [baseProviders, setBaseProviders] = useState<QueueItem[]>([]);
-  const [localStatuses, setLocalStatuses] = useState<Record<string, CaseStatus>>({});
+  const [localStatuses, setLocalStatuses] = useState<Record<string, CaseStatus>>(loadStatuses);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STATUSES_KEY, JSON.stringify(localStatuses));
+    } catch {}
+  }, [localStatuses]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +103,10 @@ export function CaseStoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const reset = useCallback(() => setLocalStatuses({}), []);
+  const reset = useCallback(() => {
+    setLocalStatuses({});
+    try { localStorage.removeItem(STATUSES_KEY); } catch {}
+  }, []);
 
   const counts = useMemo(() => {
     const confirmed = providers.filter((p) => p.status === "confirmed").length;

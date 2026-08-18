@@ -47,15 +47,17 @@ function SectionCard({
   icon: Icon,
   title,
   accent = "#3b82f6",
+  style: extraStyle,
   children,
 }: {
   icon: React.ElementType;
   title: string;
   accent?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
-    <div className="glass-panel" style={{ marginBottom: 14 }}>
+    <div className="glass-panel" style={{ marginBottom: 0, ...extraStyle }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid rgba(30,41,59,0.07)" }}>
         <div style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}18`, border: `1px solid ${accent}30` }}>
           <Icon size={15} style={{ color: accent }} />
@@ -159,99 +161,101 @@ function Settings() {
   };
 
   return (
-    <div style={{ padding: "28px 28px 72px", maxWidth: 700 }}>
+    <div style={{ padding: "36px 48px 80px" }}>
       {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.01em" }}>Settings</h1>
         <p style={{ marginTop: 5, fontSize: 13, color: "var(--text-faint)", marginBottom: 0 }}>Customize your fraud review workspace</p>
       </div>
 
-      {/* ── Notifications ────────────────────────────────────────────── */}
-      <SectionCard icon={Bell} title="Notifications" accent="#f59e0b">
-        <SettingRow
-          label="High-risk provider alerts"
-          desc="Notify when a provider scores above the high-risk threshold (≥ 0.50)"
-        >
-          <Toggle on={alertHigh} onChange={setAlertHigh} />
-        </SettingRow>
-        <SettingRow
-          label="Case escalation alerts"
-          desc="Notify when a case is escalated for senior review"
-        >
-          <Toggle on={alertEscalate} onChange={setAlertEscalate} />
-        </SettingRow>
-        <SettingRow
-          label="Scoring completion alerts"
-          desc="Notify when a new model scoring run finishes"
-          last
-        >
-          <Toggle on={alertScoring} onChange={setAlertScoring} />
-        </SettingRow>
-      </SectionCard>
+      {/* ── 2×2 grid ─────────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24, alignItems: "start" }}>
 
-      {/* ── Investigation ────────────────────────────────────────────── */}
-      <SectionCard icon={Briefcase} title="Investigation" accent="#10b981">
-        <SettingRow
-          label="Auto-open next case"
-          desc="Automatically advance to the next queued case after recording a decision"
-        >
-          <Toggle on={autoNext} onChange={setAutoNext} />
-        </SettingRow>
-        <SettingRow
-          label="Confirm before decision"
-          desc="Show a confirmation prompt before confirming fraud or clearing a provider"
-          last
-        >
-          <Toggle on={confirmDecide} onChange={setConfirmDecide} />
-        </SettingRow>
-      </SectionCard>
+        {/* ── Notifications ──────────────────────────────────────────── */}
+        <SectionCard icon={Bell} title="Notifications" accent="#f59e0b">
+          <SettingRow
+            label="High-risk provider alerts"
+            desc="Notify when a provider scores above the high-risk threshold (≥ 0.50)"
+          >
+            <Toggle on={alertHigh} onChange={setAlertHigh} />
+          </SettingRow>
+          <SettingRow
+            label="Case escalation alerts"
+            desc="Notify when a case is escalated for senior review"
+          >
+            <Toggle on={alertEscalate} onChange={setAlertEscalate} />
+          </SettingRow>
+          <SettingRow
+            label="Scoring completion alerts"
+            desc="Notify when a new model scoring run finishes"
+            last
+          >
+            <Toggle on={alertScoring} onChange={setAlertScoring} />
+          </SettingRow>
+        </SectionCard>
 
-      {/* ── Display ──────────────────────────────────────────────────── */}
-      <SectionCard icon={Monitor} title="Display" accent="#3b82f6">
-        {/* Dark / Light mode inside Display */}
-        <SettingRow
-          label="Dark mode"
-          desc="Switch between light and dark interface"
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Sun size={14} style={{ color: darkMode ? "var(--text-faint)" : "#f59e0b", transition: "color 0.2s" }} />
-            <Toggle on={darkMode} onChange={setDarkMode} />
-            <Moon size={14} style={{ color: darkMode ? "#6366f1" : "var(--text-faint)", transition: "color 0.2s" }} />
-          </div>
-        </SettingRow>
-        <SettingRow
-          label="Theme"
-          desc="Colour accent for the interface"
-        >
-          <ChipGroup
-            options={[
-              { val: "glass-blue" as const, label: "Glass Blue" },
-              { val: "slate"      as const, label: "Slate" },
-              { val: "violet"     as const, label: "Violet" },
-            ]}
-            value={theme}
-            onChange={setTheme}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Interface density"
-          desc="Control spacing and sizing of UI elements"
-          last
-        >
-          <ChipGroup
-            options={[
-              { val: "compact"     as const, label: "Compact" },
-              { val: "comfortable" as const, label: "Comfortable" },
-              { val: "spacious"    as const, label: "Spacious" },
-            ]}
-            value={density}
-            onChange={setDensity}
-          />
-        </SettingRow>
-      </SectionCard>
+        {/* ── Investigation ──────────────────────────────────────────── */}
+        <SectionCard icon={Briefcase} title="Investigation" accent="#10b981">
+          <SettingRow
+            label="Auto-open next case"
+            desc="Automatically advance to the next queued case after recording a decision"
+          >
+            <Toggle on={autoNext} onChange={setAutoNext} />
+          </SettingRow>
+          <SettingRow
+            label="Confirm before decision"
+            desc="Show a confirmation prompt before confirming fraud or clearing a provider"
+            last
+          >
+            <Toggle on={confirmDecide} onChange={setConfirmDecide} />
+          </SettingRow>
+        </SectionCard>
 
-      {/* ── Model Configuration ──────────────────────────────────────── */}
-      <SectionCard icon={DatabaseZap} title="Model Configuration" accent="#8b5cf6">
+        {/* ── Display ────────────────────────────────────────────────── */}
+        <SectionCard icon={Monitor} title="Display" accent="#3b82f6">
+          <SettingRow
+            label="Dark mode"
+            desc="Switch between light and dark interface"
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Sun size={14} style={{ color: darkMode ? "var(--text-faint)" : "#f59e0b", transition: "color 0.2s" }} />
+              <Toggle on={darkMode} onChange={setDarkMode} />
+              <Moon size={14} style={{ color: darkMode ? "#6366f1" : "var(--text-faint)", transition: "color 0.2s" }} />
+            </div>
+          </SettingRow>
+          <SettingRow
+            label="Theme"
+            desc="Colour accent for the interface"
+          >
+            <ChipGroup
+              options={[
+                { val: "glass-blue" as const, label: "Glass Blue" },
+                { val: "slate"      as const, label: "Slate" },
+                { val: "violet"     as const, label: "Violet" },
+              ]}
+              value={theme}
+              onChange={setTheme}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Interface density"
+            desc="Control spacing and sizing of UI elements"
+            last
+          >
+            <ChipGroup
+              options={[
+                { val: "compact"     as const, label: "Compact" },
+                { val: "comfortable" as const, label: "Comfortable" },
+                { val: "spacious"    as const, label: "Spacious" },
+              ]}
+              value={density}
+              onChange={setDensity}
+            />
+          </SettingRow>
+        </SectionCard>
+
+        {/* ── Model Configuration ────────────────────────────────────── */}
+        <SectionCard icon={DatabaseZap} title="Model Configuration" accent="#8b5cf6">
         {[
           { label: "Model version",       value: "v1.0" },
           { label: "Features",            value: "31" },
@@ -288,6 +292,8 @@ function Settings() {
           </button>
         </div>
       </SectionCard>
+
+      </div>{/* end 2×2 grid */}
 
       {/* ── Account ──────────────────────────────────────────────────── */}
       <SectionCard icon={LogOut} title="Account" accent="#ef4444">
