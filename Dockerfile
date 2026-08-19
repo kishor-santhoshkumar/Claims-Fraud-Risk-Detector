@@ -1,8 +1,15 @@
-# ── Backend-only image (Railway backend service) ─────────────────────────────
-# The React frontend is deployed as a separate Railway service (frontend/Dockerfile).
-#
-# Build:   docker build -t fraud-backend .
-# Run:     docker run -e GROQ_API_KEYS=gsk_... -e PORT=8000 -p 8000:8000 fraud-backend
+# ── Stage 1: build the React/Vite frontend ───────────────────────────────────
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci --silent
+COPY frontend/ ./
+# No VITE_API_URL → Vite uses relative /api path (same-origin, no proxy needed)
+RUN npm run build
+
+# ── Stage 2: Python backend + baked-in frontend dist ─────────────────────────
+# Build:   docker build -t fraud-app .
+# Run:     docker run -e GROQ_API_KEYS=gsk_... -e PORT=8000 -p 8000:8000 fraud-app
 FROM python:3.12-slim
 
 # gcc/g++ for shap/xgboost wheel compilation; libgomp for OpenMP parallelism
@@ -91,6 +98,9 @@ with open("outputs/bm25_index.pkl", "wb") as f:
     pickle.dump(bm25, f)
 print(f"[build] BM25 index: {len(chunks)} chunks")
 PYEOF
+
+# ── Frontend dist (built in stage 1) ─────────────────────────────────────────
+COPY --from=frontend-builder /app/frontend/dist frontend/dist
 
 ENV PYTHONUNBUFFERED=1
 
