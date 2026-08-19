@@ -37,8 +37,12 @@ from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+import shutil
+import tempfile
+import uuid
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 # ── Project path setup ────────────────────────────────────────────────────────
@@ -113,6 +117,12 @@ _CLAIMS_DF: dict[str, pd.DataFrame | None] = {"ip": None, "op": None}
 # Claim-level scoring population stats (loaded from outputs/claim_pop_stats.json at startup)
 _CLAIM_POP_STATS: dict = {}
 
+# ── Batch upload in-memory stores ─────────────────────────────────────────────
+_BATCH_META: dict[str, dict] = {}                          # batch_id → metadata (no providers/enrichment)
+_BATCH_PROVIDERS: dict[str, dict[str, ScoredProvider]] = {}  # batch_id → {provider_id: ScoredProvider}
+_BATCH_ENRICHMENT: dict[str, dict[str, dict]] = {}         # batch_id → {provider_id: {n_unique_bene, state, ...}}
+_JOB_STATUS: dict[str, dict] = {}                          # job_id → {state, progress, message, batch_id}
+
 # Rule weights — must match src/claim_scorer.RULE_WEIGHTS exactly
 _CLAIM_RULE_WEIGHTS: dict[str, float] = {
     "POST_DEATH_CLAIM":        0.40,
@@ -156,6 +166,14 @@ def _load_providers() -> None:
     )
     _load_enrichment()
     _load_claim_pop_stats()
+    # Load any previously uploaded batches from disk
+    batches_dir = OUTPUTS / "batches"
+    batches_dir.mkdir(exist_ok=True)
+    for batch_file in sorted(batches_dir.glob("*.json")):
+        try:
+            _load_batch_file(batch_file)
+        except Exception as e:
+            print(f"[api_temp] Failed to load batch {batch_file.name}: {e}")
     print(f"[api_temp] Peak RSS after startup: {_rss_mb():.0f} MB")
 
 
@@ -218,6 +236,40 @@ def _load_claim_pop_stats() -> None:
         f"[api_temp] Claim pop stats: median=${_CLAIM_POP_STATS['pop_median']:.0f} "
         f"p99={_CLAIM_POP_STATS['p99']:.4f} p95={_CLAIM_POP_STATS['p95']:.4f}"
     )
+
+
+def _load_batch_file(path: Path) -> None:
+    """Load a persisted batch JSON into the in-memory batch stores."""
+    with open(path) as fh:
+        data = json.load(fh)
+    bid = data["batch_id"]
+    # Store metadata without the heavy providers/enrichment arrays
+    _BATCH_META[bid] = {k: v for k, v in data.items() if k not in ("providers", "enrichment")}
+    _BATCH_PROVIDERS[bid] = {}
+    for rec in data.get("providers", []):
+        p = ScoredProvider.model_validate(rec)
+        _BATCH_PROVIDERS[bid][p.provider_id] = p
+    _BATCH_ENRICHMENT[bid] = data.get("enrichment", {})
+    print(
+        f"[api_temp] Loaded batch '{data['batch_name']}' "
+        f"({len(_BATCH_PROVIDERS[bid])} providers)"
+    )
+
+
+def _resolve_providers(batch: str) -> dict[str, ScoredProvider]:
+    """Return the provider dict for the given batch id. 'baseline' returns _PROVIDERS."""
+    if batch == "baseline":
+        return _PROVIDERS
+    if batch not in _BATCH_PROVIDERS:
+        raise HTTPException(status_code=404, detail=f"Batch '{batch}' not found.")
+    return _BATCH_PROVIDERS[batch]
+
+
+def _resolve_enrichment(batch: str) -> dict[str, dict]:
+    """Return the enrichment dict for the given batch id."""
+    if batch == "baseline":
+        return _ENRICHMENT
+    return _BATCH_ENRICHMENT.get(batch, {})
 
 
 def _score_claim_inline(
@@ -831,15 +883,23 @@ def _parse_claim(row: dict, claim_type: str) -> ClaimRow:
 
 
 @app.get("/queue", response_model=list[QueueItem], summary="Top N providers by expected loss")
-def get_queue(limit: int = Query(100, ge=1, le=5500)):
+def get_queue(
+    limit: int = Query(100, ge=1, le=5500),
+    batch: str = Query("baseline", description="Batch id to query; 'baseline' for the pre-scored 5,410 providers"),
+):
     """Return the top N providers ranked by expected_loss descending.
 
     Includes disposition status and basic enrichment (n_unique_bene, state).
+    Pass ?batch=<batch_id> to query an uploaded batch instead of the baseline.
     """
-    sorted_providers = sorted(_PROVIDERS.values(), key=lambda p: p.expected_loss, reverse=True)
+    providers_dict = _resolve_providers(batch)
+    enrichment_dict = _resolve_enrichment(batch)
+    sorted_providers = sorted(providers_dict.values(), key=lambda p: p.expected_loss, reverse=True)
     results = []
     for p in sorted_providers[:limit]:
-        enr = _enrich(p.provider_id)
+        enr = enrichment_dict.get(p.provider_id, {})
+        if "state" not in enr:
+            enr = {**enr, "state": _synthetic_state(p.provider_id)}
         results.append(QueueItem(
             provider_id=p.provider_id,
             score=p.score,
@@ -855,12 +915,22 @@ def get_queue(limit: int = Query(100, ge=1, le=5500)):
 
 
 @app.get("/provider/{provider_id}", response_model=ProviderDetail, summary="Full provider detail")
-def get_provider_detail(provider_id: str):
-    """Full ScoredProvider with evidence array, enrichment, and current disposition."""
-    p = _PROVIDERS.get(provider_id)
+def get_provider_detail(
+    provider_id: str,
+    batch: str = Query("baseline", description="Batch id to query; 'baseline' for the pre-scored dataset"),
+):
+    """Full ScoredProvider with evidence array, enrichment, and current disposition.
+
+    Pass ?batch=<batch_id> to look up a provider from an uploaded batch.
+    """
+    providers_dict = _resolve_providers(batch)
+    enrichment_dict = _resolve_enrichment(batch)
+    p = providers_dict.get(provider_id)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
-    enr = _enrich(provider_id)
+    enr = enrichment_dict.get(provider_id, {})
+    if "state" not in enr:
+        enr = {**enr, "state": _synthetic_state(provider_id)}
     return ProviderDetail(
         provider_id=p.provider_id,
         score=p.score,
@@ -1103,16 +1173,24 @@ def set_disposition(provider_id: str, body: DispositionBody):
 
 
 @app.get("/stats", response_model=StatsResponse, summary="Aggregate analytics for the dashboard")
-def get_stats():
-    """Counts, totals, and per-state distribution across all 5,410 providers."""
+def get_stats(
+    batch: str = Query("baseline", description="Batch id to query; 'baseline' for the pre-scored dataset"),
+):
+    """Counts, totals, and per-state distribution across providers in the selected batch."""
+    providers_dict = _resolve_providers(batch)
+    enrichment_dict = _resolve_enrichment(batch)
+
     by_state: dict[str, int] = {}
     total_loss = 0.0
     total_reimb = 0.0
+    tier_counts: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
 
-    for p in _PROVIDERS.values():
+    for p in providers_dict.values():
         total_loss += p.expected_loss
         total_reimb += p.total_reimbursed
-        state = _enrich(p.provider_id).get("state", "??")
+        tier_counts[p.risk_tier] = tier_counts.get(p.risk_tier, 0) + 1
+        enr = enrichment_dict.get(p.provider_id, {})
+        state = enr.get("state") or _synthetic_state(p.provider_id)
         by_state[state] = by_state.get(state, 0) + 1
 
     state_list = sorted(
@@ -1122,11 +1200,11 @@ def get_stats():
     )
 
     return StatsResponse(
-        total_providers=len(_PROVIDERS),
-        tier_distribution=dict(_TIER_COUNTS),
+        total_providers=len(providers_dict),
+        tier_distribution=tier_counts,
         total_expected_loss=round(total_loss, 2),
         total_reimbursed=round(total_reimb, 2),
-        providers_flagged=_TIER_COUNTS["high"] + _TIER_COUNTS["medium"],
+        providers_flagged=tier_counts["high"] + tier_counts["medium"],
         by_state=state_list[:20],
     )
 
@@ -1362,12 +1440,16 @@ _CHAT_SYSTEM = (
 
 
 @app.post("/chat", response_model=ChatResponse, summary="Chat assistant with optional provider context")
-def chat_assistant(body: ChatRequest):
+def chat_assistant(
+    body: ChatRequest,
+    batch: str = Query("baseline", description="Batch id to use when resolving @provider tags"),
+):
     """General-purpose chat assistant with multi-turn conversation history.
 
     Pass provider_ids to include their evidence as context (extracted from @mentions in the UI).
     Pass claim_ids to include individual claim context (extracted from #mentions in the UI).
     Pass history as [{role, content}] pairs for conversational continuity within a session.
+    Pass ?batch=<batch_id> to resolve @provider tags from an uploaded batch.
     Returns 503 if all Groq keys are rate-limited.
     """
     from src.narrator import _call_groq_messages, _MODEL_MEDIUM
@@ -1376,9 +1458,11 @@ def chat_assistant(body: ChatRequest):
     rule_citations = {r["id"]: r["citation"] for r in CLAIM_RULES}
     context_blocks: list[str] = []
 
+    providers_dict = _resolve_providers(batch)
+
     # ── Provider context (@mentions) ──────────────────────────────────────────
     for pid in body.provider_ids[:3]:
-        p = _PROVIDERS.get(pid.upper())
+        p = providers_dict.get(pid.upper())
         if not p:
             context_blocks.append(f"Provider @{pid}: not found in scored dataset.")
             continue
@@ -1512,3 +1596,214 @@ def get_simulation_replay(capacity: int = Query(100, ge=1, le=5000)):
         return build_replay(capacity)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Replay build failed: {exc}")
+
+
+# ── Batch upload endpoints ─────────────────────────────────────────────────────
+
+
+class BatchUploadResponse(BaseModel):
+    job_id: str
+    batch_id: str
+    message: str
+
+
+class BatchMeta(BaseModel):
+    batch_id: str
+    batch_name: str
+    uploaded_at: str
+    row_count: int
+    provider_count: int
+    date_range: dict
+    has_labels: bool
+
+
+class JobStatus(BaseModel):
+    job_id: str
+    batch_id: str
+    state: Literal["processing", "ready", "failed"]
+    progress: int  # 0–100
+    message: str
+
+
+@app.post(
+    "/batches/upload",
+    response_model=BatchUploadResponse,
+    summary="Upload a flat claims CSV and score it as a new batch",
+)
+async def upload_batch(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    batch_name: str = Form(...),
+):
+    """Accept a flat claims CSV, score it in the background, and persist the batch.
+
+    Returns a job_id and batch_id immediately. Poll GET /batches/{batch_id}/status
+    to track progress. The batch is available via GET /queue?batch=<batch_id> once
+    state = 'ready'.
+    """
+    job_id = str(uuid.uuid4())[:8]
+    batch_id = f"batch_{job_id}"
+    _JOB_STATUS[job_id] = {
+        "state": "processing",
+        "progress": 0,
+        "message": "Queued",
+        "batch_id": batch_id,
+    }
+
+    # Save upload to a temp file so we can close the request stream
+    suffix = Path(file.filename or "upload.csv").suffix or ".csv"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    shutil.copyfileobj(file.file, tmp)
+    tmp.close()
+
+    background_tasks.add_task(
+        _run_upload_job, job_id, batch_id, batch_name, Path(tmp.name)
+    )
+    return BatchUploadResponse(
+        job_id=job_id,
+        batch_id=batch_id,
+        message="Processing started",
+    )
+
+
+def _run_upload_job(job_id: str, batch_id: str, batch_name: str, csv_path: Path) -> None:
+    """Background task: score the CSV and load the result into memory."""
+    try:
+        from src.upload_pipeline import process_upload
+
+        model_state = _get_model()
+
+        def progress(pct: int, msg: str) -> None:
+            _JOB_STATUS[job_id]["progress"] = pct
+            _JOB_STATUS[job_id]["message"] = msg
+
+        process_upload(csv_path, batch_name, batch_id, model_state, progress)
+
+        # Load the written batch file into the in-memory stores
+        batch_file = OUTPUTS / "batches" / f"{batch_id}.json"
+        _load_batch_file(batch_file)
+
+        _JOB_STATUS[job_id]["state"] = "ready"
+        _JOB_STATUS[job_id]["progress"] = 100
+        _JOB_STATUS[job_id]["message"] = "Complete"
+
+    except Exception as exc:
+        _JOB_STATUS[job_id]["state"] = "failed"
+        _JOB_STATUS[job_id]["message"] = str(exc)
+    finally:
+        try:
+            csv_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+@app.get(
+    "/batches/{batch_id}/status",
+    response_model=JobStatus,
+    summary="Check processing status for a batch upload",
+)
+def get_job_status(batch_id: str):
+    """Return job state, progress (0–100), and message for the given batch_id.
+
+    Returns state='ready' immediately if the batch was loaded from disk at startup.
+    """
+    # Find the matching job in _JOB_STATUS
+    for job_id, status in _JOB_STATUS.items():
+        if status["batch_id"] == batch_id:
+            return JobStatus(
+                job_id=job_id,
+                batch_id=batch_id,
+                state=status["state"],
+                progress=status["progress"],
+                message=status["message"],
+            )
+    # Batch already loaded at startup (no in-flight job record)
+    if batch_id in _BATCH_META:
+        return JobStatus(
+            job_id="",
+            batch_id=batch_id,
+            state="ready",
+            progress=100,
+            message="Ready",
+        )
+    raise HTTPException(status_code=404, detail=f"No job for batch '{batch_id}'")
+
+
+@app.get(
+    "/batches",
+    response_model=list[BatchMeta],
+    summary="List all available batches (baseline + uploads)",
+)
+def list_batches():
+    """Return the baseline batch plus all uploaded batches in chronological order."""
+    baseline = BatchMeta(
+        batch_id="baseline",
+        batch_name="Baseline — 5,410 providers",
+        uploaded_at="2009-01-01T00:00:00Z",
+        row_count=len(_PROVIDERS),
+        provider_count=len(_PROVIDERS),
+        date_range={"start": "2009-01-01", "end": "2009-12-31"},
+        has_labels=True,
+    )
+    uploaded = [BatchMeta(**m) for m in _BATCH_META.values()]
+    return [baseline] + uploaded
+
+
+@app.get(
+    "/batches/{batch_id}",
+    response_model=BatchMeta,
+    summary="Fetch metadata for a single batch",
+)
+def get_batch(batch_id: str):
+    """Return metadata for the given batch id."""
+    if batch_id == "baseline":
+        return BatchMeta(
+            batch_id="baseline",
+            batch_name="Baseline — 5,410 providers",
+            uploaded_at="2009-01-01T00:00:00Z",
+            row_count=len(_PROVIDERS),
+            provider_count=len(_PROVIDERS),
+            date_range={"start": "2009-01-01", "end": "2009-12-31"},
+            has_labels=True,
+        )
+    if batch_id not in _BATCH_META:
+        raise HTTPException(status_code=404, detail=f"Batch '{batch_id}' not found.")
+    return BatchMeta(**_BATCH_META[batch_id])
+
+
+@app.delete("/batches/{batch_id}", summary="Delete an uploaded batch")
+def delete_batch(batch_id: str):
+    """Remove an uploaded batch from memory and disk.
+
+    The baseline batch cannot be deleted.
+    """
+    if batch_id == "baseline":
+        raise HTTPException(status_code=400, detail="Cannot delete the baseline batch.")
+    if batch_id not in _BATCH_META:
+        raise HTTPException(status_code=404, detail=f"Batch '{batch_id}' not found.")
+    _BATCH_META.pop(batch_id, None)
+    _BATCH_PROVIDERS.pop(batch_id, None)
+    _BATCH_ENRICHMENT.pop(batch_id, None)
+    batch_file = OUTPUTS / "batches" / f"{batch_id}.json"
+    if batch_file.exists():
+        batch_file.unlink()
+    return {"deleted": batch_id}
+
+
+@app.get("/sample-month-csv", summary="Download the synthetic one-month sample CSV")
+def download_sample_month():
+    """Serve the pre-generated sample_month.csv for manual upload testing.
+
+    Generate the file first by running:
+        python scripts/generate_synthetic_month.py
+    """
+    path = OUTPUTS / "sample_month.csv"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Sample month CSV not yet generated. "
+                "Run: python scripts/generate_synthetic_month.py"
+            ),
+        )
+    return FileResponse(path, media_type="text/csv", filename="sample_month.csv")

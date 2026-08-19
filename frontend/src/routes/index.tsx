@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AlertCircle, AlertTriangle, Banknote, CheckCircle2, DollarSign, FileText, LayoutDashboard, Shield, TrendingUp, Users } from "lucide-react";
 import { useCaseStore } from "@/lib/caseStore";
+import { useBatch } from "@/lib/batchContext";
 import { formatMoneyShort } from "@/lib/mockData";
 
 export const Route = createFileRoute("/")({
@@ -146,6 +147,8 @@ function RightPanel({ recentActivity, navigate }: { recentActivity: Provider[]; 
 function Dashboard() {
   const navigate = useNavigate();
   const { providers, loading, error, counts } = useCaseStore();
+  const { activeBatchMeta } = useBatch();
+  const hasLabels = activeBatchMeta?.has_labels !== false;
 
   const stats = useMemo(() => {
     const high   = providers.filter(p => p.risk_tier === "high");
@@ -209,10 +212,12 @@ function Dashboard() {
   ];
 
   const riskCards = [
-    { label: "Fraud Detection Rate",    value: `${detectionRate}%`,                  icon: TrendingUp,   accent: "#6366f1", bg: "rgba(99,102,241,0.09)",  border: "rgba(99,102,241,0.22)",  desc: `${counts.confirmed} confirmed of ${stats.flagged} flagged` },
-    { label: "Total Claim Amount",      value: formatMoneyShort(stats.totalAmount),  icon: DollarSign,   accent: "#3b82f6", bg: "rgba(59,130,246,0.09)",  border: "rgba(59,130,246,0.22)",  desc: "Total reimbursed, all providers" },
-    { label: "Suspicious Claim Amount", value: formatMoneyShort(stats.suspiciousAmount), icon: Banknote, accent: "#f59e0b", bg: "rgba(245,158,11,0.09)",  border: "rgba(245,158,11,0.22)",  desc: "Reimbursed from flagged providers" },
-    { label: "High Risk Providers",     value: stats.highRisk.toLocaleString(),       icon: Shield,       accent: "#ef4444", bg: "rgba(239,68,68,0.09)",   border: "rgba(239,68,68,0.22)",   desc: "Score ≥ 0.50" },
+    hasLabels
+      ? { label: "Fraud Detection Rate", value: `${detectionRate}%`, icon: TrendingUp, accent: "#6366f1", bg: "rgba(99,102,241,0.09)", border: "rgba(99,102,241,0.22)", desc: `${counts.confirmed} confirmed of ${stats.flagged} flagged` }
+      : { label: "Fraud Detection Rate", value: "N/A", icon: TrendingUp, accent: "#9ca3af", bg: "rgba(156,163,175,0.07)", border: "rgba(156,163,175,0.18)", desc: "Ground truth not available for uploaded data" },
+    { label: "Total Claim Amount",      value: formatMoneyShort(stats.totalAmount),      icon: DollarSign,   accent: "#3b82f6", bg: "rgba(59,130,246,0.09)",  border: "rgba(59,130,246,0.22)",  desc: "Total reimbursed, all providers" },
+    { label: "Suspicious Claim Amount", value: formatMoneyShort(stats.suspiciousAmount), icon: Banknote,     accent: "#f59e0b", bg: "rgba(245,158,11,0.09)",  border: "rgba(245,158,11,0.22)",  desc: "Reimbursed from flagged providers" },
+    { label: "High Risk Providers",     value: stats.highRisk.toLocaleString(),          icon: Shield,       accent: "#ef4444", bg: "rgba(239,68,68,0.09)",   border: "rgba(239,68,68,0.22)",   desc: "Score ≥ 0.50" },
   ];
 
   return (

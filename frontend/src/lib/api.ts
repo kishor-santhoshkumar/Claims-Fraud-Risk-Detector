@@ -186,7 +186,51 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ── API functions ─────────────────────────────────────────────────────────────
 
-export async function fetchQueue(limit = 100): Promise<QueueItem[]> {
+// ── Batch types ──────────────────────────────────────────────────────────────
+
+export interface BatchMeta {
+  batch_id: string;
+  batch_name: string;
+  uploaded_at: string;
+  row_count: number;
+  provider_count: number;
+  date_range: { start: string; end: string };
+  has_labels: boolean;
+}
+
+export interface JobStatus {
+  job_id: string;
+  batch_id: string;
+  state: "processing" | "ready" | "failed";
+  progress: number;
+  message: string;
+}
+
+export async function fetchBatches(): Promise<BatchMeta[]> {
+  return apiFetch<BatchMeta[]>("/batches");
+}
+
+export async function fetchBatchStatus(batchId: string): Promise<JobStatus> {
+  return apiFetch<JobStatus>(`/batches/${batchId}/status`);
+}
+
+export async function deleteBatch(batchId: string): Promise<void> {
+  await apiFetch<unknown>(`/batches/${batchId}`, { method: "DELETE" });
+}
+
+export async function uploadBatch(file: File, batchName: string): Promise<{ job_id: string; batch_id: string; message: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("batch_name", batchName);
+  const res = await fetch(`${API_BASE}/batches/upload`, { method: "POST", body: form });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(detail.detail ?? res.statusText);
+  }
+  return res.json();
+}
+
+export async function fetchQueue(limit = 100, batch = "baseline"): Promise<QueueItem[]> {
   if (USE_MOCK) {
     return mockProviders.slice(0, limit).map((p) => ({
       provider_id: p.provider_id,
@@ -200,10 +244,10 @@ export async function fetchQueue(limit = 100): Promise<QueueItem[]> {
       state: p.state,
     }));
   }
-  return apiFetch<QueueItem[]>(`/queue?limit=${limit}`);
+  return apiFetch<QueueItem[]>(`/queue?limit=${limit}&batch=${batch}`);
 }
 
-export async function fetchProvider(id: string): Promise<ProviderDetail> {
+export async function fetchProvider(id: string, batch = "baseline"): Promise<ProviderDetail> {
   if (USE_MOCK) {
     const p = mockProviders.find((x) => x.provider_id === id);
     if (!p) throw Object.assign(new Error("Not found"), { status: 404 });
@@ -221,7 +265,7 @@ export async function fetchProvider(id: string): Promise<ProviderDetail> {
       state: p.state,
     };
   }
-  return apiFetch<ProviderDetail>(`/provider/${id}`);
+  return apiFetch<ProviderDetail>(`/provider/${id}?batch=${batch}`);
 }
 
 export async function fetchClaims(

@@ -1,14 +1,16 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, LayoutDashboard, ListChecks, LogOut, MessageSquare, Settings, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { BarChart3, ChevronDown, Database, LayoutDashboard, ListChecks, LogOut, MessageSquare, Settings, ShieldCheck, Upload } from "lucide-react";
+import { useState } from "react";
 import { logout } from "@/lib/auth";
+import { useBatch } from "@/lib/batchContext";
 
 const items = [
-  { to: "/",           label: "Dashboard",       icon: LayoutDashboard },
-  { to: "/queue",      label: "Queue",            icon: ListChecks },
-  { to: "/assistant",  label: "Assistant",        icon: MessageSquare },
-  { to: "/analytics",  label: "Analytics",        icon: BarChart3 },
-  { to: "/simulation", label: "Simulation",       icon: SlidersHorizontal },
-  { to: "/settings",   label: "Settings",         icon: Settings },
+  { to: "/",          label: "Dashboard",  icon: LayoutDashboard },
+  { to: "/queue",     label: "Queue",      icon: ListChecks },
+  { to: "/assistant", label: "Assistant",  icon: MessageSquare },
+  { to: "/analytics", label: "Analytics",  icon: BarChart3 },
+  { to: "/upload",    label: "Upload",     icon: Upload },
+  { to: "/settings",  label: "Settings",   icon: Settings },
 ];
 
 const SIDEBAR_STYLE: React.CSSProperties = {
@@ -30,11 +32,15 @@ const SIDEBAR_STYLE: React.CSSProperties = {
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const { activeBatch, setActiveBatch, batches, activeBatchMeta } = useBatch();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate({ to: "/login" });
   };
+
+  const isBaseline = activeBatch === "baseline";
 
   return (
     <nav className="w-14 md:w-[200px]" style={SIDEBAR_STYLE}>
@@ -81,8 +87,63 @@ export function AppSidebar() {
         })}
       </div>
 
+      {/* Batch switcher */}
+      <div className="hidden md:block" style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(30,41,59,0.07)", position: "relative" }}>
+        <p style={{ fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-faint)", margin: "0 0 6px 4px" }}>Active Dataset</p>
+        <button
+          onClick={() => setDropdownOpen((o) => !o)}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 8,
+            background: isBaseline ? "rgba(255,255,255,0.5)" : "rgba(99,102,241,0.1)",
+            border: isBaseline ? "1px solid rgba(100,116,139,0.22)" : "1px solid rgba(99,102,241,0.3)",
+            borderRadius: 10, padding: "7px 10px", cursor: "pointer",
+            fontFamily: "inherit", transition: "background 0.15s",
+          }}
+        >
+          <Database size={13} color={isBaseline ? "var(--text-muted)" : "#6366f1"} strokeWidth={2} style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+            <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: isBaseline ? "var(--text-secondary)" : "#4f46e5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {activeBatchMeta?.batch_name.replace("Baseline — ", "Baseline") ?? "Baseline"}
+            </p>
+            <p style={{ margin: 0, fontSize: 10, color: "var(--text-faint)" }}>
+              {activeBatchMeta?.provider_count.toLocaleString() ?? "?"} providers
+            </p>
+          </div>
+          <ChevronDown size={12} color="var(--text-faint)" style={{ flexShrink: 0, transform: dropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+        </button>
+
+        {dropdownOpen && (
+          <div style={{
+            position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0,
+            background: "rgba(255,255,255,0.95)", backdropFilter: "blur(16px)",
+            border: "1px solid rgba(100,116,139,0.2)", borderRadius: 12,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 100,
+          }}>
+            {batches.map((b) => (
+              <button
+                key={b.batch_id}
+                onClick={() => { setActiveBatch(b.batch_id); setDropdownOpen(false); }}
+                style={{
+                  width: "100%", display: "flex", flexDirection: "column", padding: "9px 12px",
+                  background: activeBatch === b.batch_id ? "rgba(99,102,241,0.08)" : "transparent",
+                  border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                  borderBottom: "1px solid rgba(30,41,59,0.05)",
+                }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600, color: activeBatch === b.batch_id ? "#4f46e5" : "var(--text-primary)" }}>
+                  {b.batch_name}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--text-faint)" }}>
+                  {b.provider_count.toLocaleString()} providers · {b.date_range.start.slice(0,7)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Bottom */}
-      <div style={{ marginTop: "auto", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ marginTop: 8, paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
         {/* User card */}
         <div className="hidden md:flex" style={{ alignItems: "center", gap: 10, background: "rgba(255,255,255,0.5)", border: "1px solid rgba(100,116,139,0.22)", borderRadius: 12, padding: "8px 10px" }}>
           <div style={{ width: 30, height: 30, flexShrink: 0, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#f8fafc", background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>

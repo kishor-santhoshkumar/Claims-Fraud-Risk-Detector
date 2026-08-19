@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { setDisposition, type CaseStatus, type QueueItem } from "./api";
+import { fetchQueue, setDisposition, type CaseStatus, type QueueItem } from "./api";
 
 export type { CaseStatus };
 
@@ -43,7 +43,13 @@ function loadStatuses(): Record<string, CaseStatus> {
   }
 }
 
-export function CaseStoreProvider({ children }: { children: ReactNode }) {
+export function CaseStoreProvider({
+  children,
+  batch = "baseline",
+}: {
+  children: ReactNode;
+  batch?: string;
+}) {
   const [baseProviders, setBaseProviders] = useState<QueueItem[]>([]);
   const [localStatuses, setLocalStatuses] = useState<Record<string, CaseStatus>>(loadStatuses);
   const [loading, setLoading] = useState(true);
@@ -59,11 +65,7 @@ export function CaseStoreProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch("/queue_data.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`Failed to load queue_data.json: ${r.status}`);
-        return r.json() as Promise<QueueItem[]>;
-      })
+    fetchQueue(2000, batch)
       .then((items) => {
         if (!cancelled) {
           setBaseProviders(items);
@@ -79,7 +81,7 @@ export function CaseStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [batch]);
 
   const providers: CaseProvider[] = useMemo(
     () =>

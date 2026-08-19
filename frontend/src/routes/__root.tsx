@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { isAuthenticated } from "../lib/auth";
 import { CaseStoreProvider } from "../lib/caseStore";
+import { BatchProvider, useBatch } from "../lib/batchContext";
 import { AppSidebar } from "../components/AppSidebar";
 import { Toaster } from "../components/ui/sonner";
 
@@ -104,20 +105,29 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <CaseStoreProvider>
-        <div style={{ position: "relative", display: "flex", minHeight: "100svh", overflow: "hidden" }}>
-          <div className="ambient-bg ambient-bg--subtle" aria-hidden="true">
-            <div className="ambient-blob ambient-blob--a" />
-            <div className="ambient-blob ambient-blob--b" />
-            <div className="ambient-blob ambient-blob--c" />
-          </div>
-          <AppSidebar />
-          <main style={{ position: "relative", zIndex: 2, flex: 1, minWidth: 0, height: "100svh", overflowY: "auto" }}>
-            <Outlet />
-          </main>
-        </div>
-        <Toaster />
-      </CaseStoreProvider>
+      <BatchProvider>
+        <BatchAwareCaseStore />
+      </BatchProvider>
     </QueryClientProvider>
+  );
+}
+
+function BatchAwareCaseStore() {
+  const { activeBatch } = useBatch();
+  return (
+    <CaseStoreProvider batch={activeBatch}>
+      <div style={{ position: "relative", display: "flex", minHeight: "100svh", overflow: "hidden" }}>
+        <div className="ambient-bg ambient-bg--subtle" aria-hidden="true">
+          <div className="ambient-blob ambient-blob--a" />
+          <div className="ambient-blob ambient-blob--b" />
+          <div className="ambient-blob ambient-blob--c" />
+        </div>
+        <AppSidebar />
+        <main style={{ position: "relative", zIndex: 2, flex: 1, minWidth: 0, height: "100svh", overflowY: "auto" }}>
+          <Outlet />
+        </main>
+      </div>
+      <Toaster />
+    </CaseStoreProvider>
   );
 }
