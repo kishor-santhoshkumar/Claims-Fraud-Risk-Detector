@@ -67,7 +67,7 @@ CC_RATES = [0.12, 0.18, 0.20, 0.10, 0.15, 0.22, 0.30, 0.25, 0.18, 0.12, 0.08]
 DIAG_POOL: list[str] = (
     [f"4{random.randint(10, 99)}.{random.randint(0, 9)}" for _ in range(200)]
     + [f"25{random.randint(0, 5)}.{random.randint(0, 9)}" for _ in range(50)]
-    + [f"4{random.randint(00, 09)}.{random.randint(0, 9)}" for _ in range(50)]
+    + [f"4{random.randint(0, 9)}.{random.randint(0, 9)}" for _ in range(50)]
 )
 PROC_POOL: list[str] = [f"{random.randint(10000, 99999)}" for _ in range(300)]
 
@@ -446,7 +446,7 @@ out_df = merged[final_cols].copy()
 
 # Write CSV
 out_df.to_csv(OUT_PATH, index=False)
-print(f"Written {len(out_df):,} claims → {OUT_PATH}")
+print(f"Written {len(out_df):,} claims -> {OUT_PATH}")
 
 # ── Print planted findings report ─────────────────────────────────────────────
 

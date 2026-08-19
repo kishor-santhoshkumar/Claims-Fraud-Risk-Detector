@@ -31,6 +31,18 @@ COPY outputs/simulation_base.json        outputs/simulation_base.json
 COPY outputs/simulation_narrative.json   outputs/simulation_narrative.json
 COPY outputs/scored_claims.json          outputs/scored_claims.json
 COPY outputs/claim_score_index.json      outputs/claim_score_index.json
+COPY outputs/claim_pop_stats.json        outputs/claim_pop_stats.json
+
+# ── ML artefacts for batch upload scoring ────────────────────────────────────
+# These are required by src/upload_pipeline.py to score uploaded CSVs without
+# retraining. feature_stats inside features_train.parquet drives SHAP percentiles
+# (always computed against the baseline 5,410-provider population).
+COPY outputs/features_train.parquet      outputs/features_train.parquet
+COPY outputs/oof_predictions.npy         outputs/oof_predictions.npy
+COPY outputs/shap_values.npy             outputs/shap_values.npy
+COPY outputs/feature_cols.json           outputs/feature_cols.json
+COPY outputs/rf_gate_threshold.json      outputs/rf_gate_threshold.json
+COPY outputs/model_cache.ubj             outputs/model_cache.ubj
 
 # ── Build ChromaDB dense index ────────────────────────────────────────────────
 # This step also downloads and caches the ONNX embedding model inside the image,
