@@ -1,0 +1,9 @@
+.session-checking {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--page-gradient);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}

@@ -30,7 +30,7 @@ from src.export import (
     _risk_tier,
     _build_shap_evidence,
 )
-from src.schema import ScoredProvider
+from src.schema import ScoredProvider, RuleEvidence
 from src.features import enrich_claims, compute_cross_entity_spans, aggregate_to_provider
 
 # ---------------------------------------------------------------------------
@@ -95,6 +95,15 @@ _RULE_WEIGHTS: dict[str, float] = {
     "SHORT_STAY_HIGH_COST":    0.25,
     "MISSING_ATTENDING":       0.20,
     "SAME_DAY_MULTI_PROVIDER": 0.20,
+}
+
+_RULE_META: dict[str, dict] = {
+    "POST_DEATH_CLAIM":        {"label": "Post-death billing",              "category": "fraud",      "severity": "high",   "citation": "Medicare BPM Ch.15 §15.1"},
+    "DUPLICATE_CLAIM":         {"label": "Duplicate claim",                 "category": "fraud",      "severity": "high",   "citation": "Medicare PIM Ch.4 §4.3.1"},
+    "DISCHARGE_BEFORE_ADMIT":  {"label": "Discharge before admit",          "category": "fraud",      "severity": "medium", "citation": "Medicare PIM Ch.3 §3.2.4"},
+    "SHORT_STAY_HIGH_COST":    {"label": "Short stay / high cost",          "category": "fraud",      "severity": "medium", "citation": "Medicare PIM Ch.6 §6.5.2"},
+    "MISSING_ATTENDING":       {"label": "Missing attending physician",      "category": "compliance", "severity": "medium", "citation": "42 CFR §424.22"},
+    "SAME_DAY_MULTI_PROVIDER": {"label": "Same-day multi-provider billing", "category": "fraud",      "severity": "low",    "citation": "Medicare PIM Ch.4 §4.5"},
 }
 
 _MAX_FILE_MB = 50
@@ -399,12 +408,6 @@ def process_upload(
     ip_claim_cols = [c for c in ip_claim_cols if c in df.columns]
     op_claim_cols = [c for c in op_claim_cols if c in df.columns]
 
-    # Include State column for later enrichment
-    if "State" in df.columns:
-        for lst in (ip_claim_cols, op_claim_cols):
-            if "State" not in lst:
-                lst.append("State")
-
     ip = df[ip_mask][ip_claim_cols].copy()
     op = df[op_mask][op_claim_cols].copy()
 
@@ -544,6 +547,7 @@ def process_upload(
             clearance_summary=None,
         )
         providers.append(sp)
+        # rule evidence is added after claim scoring below; sp.evidence is mutated in place
 
         # Enrichment
         n_unique_bene = int(provider_df.iloc[i].get("n_unique_bene", 0) or 0)
@@ -612,6 +616,28 @@ def process_upload(
                 "cross_z": c_cz,
             })
         claim_records[provider_id] = claim_dicts
+
+        # Aggregate claim-level rule flags → provider-level RuleEvidence
+        flag_counts: dict[str, int] = {}
+        for cd in claim_dicts:
+            for flag in cd.get("rule_flags", []):
+                flag_counts[flag] = flag_counts.get(flag, 0) + 1
+        rule_evidence_items = []
+        for flag, count in sorted(flag_counts.items(), key=lambda x: -x[1]):
+            meta = _RULE_META.get(flag)
+            if meta is None:
+                continue
+            rule_evidence_items.append(RuleEvidence(
+                category=meta["category"],
+                severity=meta["severity"],
+                summary=f"{meta['label']}: {count} claim{'s' if count > 1 else ''} affected.",
+                rule_id=flag,
+                citation=meta["citation"],
+                claims_affected=count,
+                relates_to=None,
+            ))
+        if rule_evidence_items:
+            sp.evidence = list(sp.evidence) + rule_evidence_items
 
     # ------------------------------------------------------------------
     # Step 11: Compute date range

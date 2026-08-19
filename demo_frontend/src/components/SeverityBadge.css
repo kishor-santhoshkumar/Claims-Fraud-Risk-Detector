@@ -1,0 +1,22 @@
+.severity-badge {
+  display: inline-flex;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.severity-badge--high {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+}
+.severity-badge--medium {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+.severity-badge--low {
+  background: rgba(100, 116, 139, 0.14);
+  color: #475569;
+}

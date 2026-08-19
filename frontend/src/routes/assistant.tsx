@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCaseStore } from "@/lib/caseStore";
+import { useBatch } from "@/lib/batchContext";
 import {
   chatWithAssistant,
   fetchClaimSearch,
@@ -53,6 +54,7 @@ function TierDot({ tier }: { tier: string }) {
 
 function Assistant() {
   const { providers } = useCaseStore();
+  const { activeBatch } = useBatch();
   const [messages, setMessages] = useState<Msg[]>(() =>
     loadSession<Msg[]>("chat_messages", [INITIAL_MSG])
   );
@@ -105,10 +107,10 @@ function Assistant() {
     const term = q[1] ?? "";
     let cancelled = false;
     const tid = setTimeout(() => {
-      fetchClaimSearch(term).then((r) => { if (!cancelled) setClaimSuggestions(r); });
+      fetchClaimSearch(term, activeBatch).then((r) => { if (!cancelled) setClaimSuggestions(r); }).catch(() => {});
     }, 200);
     return () => { cancelled = true; clearTimeout(tid); };
-  }, [input]);
+  }, [input, activeBatch]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -137,7 +139,7 @@ function Assistant() {
     if (newClaimIds.length > 0) setSessionClaims(allClaimIds);
 
     try {
-      const reply = await chatWithAssistant(text, allProviderIds, history, allClaimIds);
+      const reply = await chatWithAssistant(text, allProviderIds, history, allClaimIds, activeBatch);
       setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", text: reply }]);
     } catch {
       setMessages((m) => [

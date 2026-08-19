@@ -56,12 +56,14 @@ export function NarrativePanel({
   variant,
   open,
   onOpenChange,
+  batch = "baseline",
 }: {
   providerId: string;
   evidence: Evidence[];
   variant: "case" | "clearance";
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  batch?: string;
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<NarrativeResponse | null>(null);
@@ -70,12 +72,12 @@ export function NarrativePanel({
     if (!open) return;
     setLoading(true);
     setResult(null);
-    const req = variant === "case" ? fetchExplanation(providerId) : fetchClearance(providerId);
+    const req = variant === "case" ? fetchExplanation(providerId, batch) : fetchClearance(providerId, batch);
     req
       .then((r) => setResult(r))
       .catch(() => setResult(null))
       .finally(() => setLoading(false));
-  }, [open, providerId, variant]);
+  }, [open, providerId, variant, batch]);
 
   // Split narrative into paragraphs on blank lines
   const paragraphs = result?.narrative

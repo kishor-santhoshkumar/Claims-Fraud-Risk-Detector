@@ -1,0 +1,307 @@
+.login-page {
+  --accent-blue: #3b82f6;
+  --accent-violet: #6366f1;
+
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  background: var(--page-gradient);
+}
+
+/* Ambient blob/grid backdrop now lives in components/AmbientBackground.css
+   (shared with the post-login app shell) -- rendered via <AmbientBackground /> */
+
+/* ---------- content layout ---------- */
+
+.login-content {
+  position: relative;
+  z-index: 2;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
+  padding: 64px 20px 96px;
+}
+
+/* ---------- glass card ---------- */
+
+@keyframes cardEntrance {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes cardShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+
+.login-card {
+  width: min(440px, 100%);
+  padding: 48px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.85) 0%, rgba(219, 234, 254, 0.72) 55%, rgba(191, 219, 254, 0.62) 100%);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 20px;
+  box-shadow:
+    0 24px 60px rgba(59, 130, 246, 0.18),
+    0 2px 8px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  animation: cardEntrance 0.4s ease-out;
+}
+
+.login-card.is-shaking {
+  animation: cardShake 0.4s ease-in-out;
+}
+
+/* ---------- header ---------- */
+
+.login-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-icon-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-violet));
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+  margin-bottom: 18px;
+}
+
+.login-title {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-top: 6px;
+}
+
+/* ---------- form ---------- */
+
+.login-field {
+  margin-bottom: 18px;
+}
+
+.login-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 7px;
+}
+
+.login-input-wrap {
+  position: relative;
+}
+
+.login-input {
+  width: 100%;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 10px;
+  padding: 0 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-input--password {
+  padding-right: 44px;
+}
+
+.login-input::placeholder {
+  color: rgba(71, 81, 107, 0.45);
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.login-input:disabled {
+  opacity: 0.6;
+}
+
+.login-toggle-visibility {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  padding: 8px;
+  display: flex;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.15s ease;
+}
+
+.login-toggle-visibility:hover {
+  color: var(--text-primary);
+}
+
+/* ---------- error ---------- */
+
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.login-error svg {
+  flex-shrink: 0;
+}
+
+/* ---------- submit button ---------- */
+
+.login-submit {
+  width: 100%;
+  height: 50px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-violet));
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.login-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 10px 28px rgba(59, 130, 246, 0.4);
+}
+
+.login-submit:disabled {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.login-spinner {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- inline quote (inside the card, replaces the demo-credentials chip) ---------- */
+
+.login-inline-quote {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--hairline);
+  text-align: center;
+}
+
+.login-quote-divider {
+  width: 28px;
+  height: 1px;
+  background: rgba(71, 81, 107, 0.25);
+  margin: 0 auto 14px;
+}
+
+@keyframes quoteFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-quote-text {
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  opacity: 0.85;
+  animation: quoteFade 0.6s ease;
+}
+
+.login-quote-attribution {
+  margin-top: 10px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+
+/* ---------- footer ---------- */
+
+.login-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  z-index: 2;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 560px) {
+  .login-content {
+    padding: 40px 16px 80px;
+    gap: 32px;
+  }
+  .login-card {
+    padding: 32px 24px;
+    border-radius: 16px;
+  }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .login-card {
+    animation: none;
+  }
+  .login-card.is-shaking {
+    animation: none;
+  }
+  .login-quote-text {
+    animation: none;
+  }
+  .login-submit:hover:not(:disabled) {
+    transform: none;
+  }
+}

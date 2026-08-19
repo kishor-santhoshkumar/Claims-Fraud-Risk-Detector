@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CaseDetail } from "@/components/CaseDetail";
 import { fetchProvider, type ProviderDetail } from "@/lib/api";
+import { useBatch } from "@/lib/batchContext";
 
 export const Route = createFileRoute("/case/$providerId")({
   component: CasePage,
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/case/$providerId")({
 function CasePage() {
   const { providerId } = Route.useParams();
   const navigate = useNavigate();
+  const { activeBatch } = useBatch();
   const [provider, setProvider] = useState<ProviderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +19,11 @@ function CasePage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetchProvider(providerId)
+    fetchProvider(providerId, activeBatch)
       .then(setProvider)
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId]);
+  }, [providerId, activeBatch]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

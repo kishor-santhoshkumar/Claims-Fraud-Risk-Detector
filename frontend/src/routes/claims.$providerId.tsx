@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchClaims, type Claim } from "@/lib/api";
 import { useCaseStore } from "@/lib/caseStore";
+import { useBatch } from "@/lib/batchContext";
 import { formatMoneyFull } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 
@@ -175,6 +176,7 @@ function ClaimsPage() {
   const { providerId } = Route.useParams();
   const navigate = useNavigate();
   const { providers } = useCaseStore();
+  const { activeBatch } = useBatch();
 
   const askAboutClaim = (claimId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -208,7 +210,7 @@ function ClaimsPage() {
     setError(null);
     setClaims([]);
     setPage(1);
-    fetchClaims(providerId, 1, PER_PAGE)
+    fetchClaims(providerId, 1, PER_PAGE, activeBatch)
       .then((res) => {
         const amounts = res.claims.map((c) => c.amount_reimbursed);
         setClaims(res.claims.map((c) => scoreClaimInline(c, amounts)));
@@ -216,12 +218,12 @@ function ClaimsPage() {
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [providerId]);
+  }, [providerId, activeBatch]);
 
   const loadMore = () => {
     const nextPage = page + 1;
     setLoadingMore(true);
-    fetchClaims(providerId, nextPage, PER_PAGE)
+    fetchClaims(providerId, nextPage, PER_PAGE, activeBatch)
       .then((res) => {
         setClaims((prev) => {
           const allAmounts = [...prev, ...res.claims].map((c) => c.amount_reimbursed);

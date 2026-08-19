@@ -537,9 +537,10 @@ def get_provider(provider_id: str):
     response_model=ClearanceResponse,
     summary="Why this provider was not flagged (legacy — returns pre-computed summary)",
 )
-def why_not_flagged_get(provider_id: str):
+def why_not_flagged_get(provider_id: str, batch: str = Query("baseline")):
     """Pre-computed clearance summary. Use POST /provider/{id}/why-not for LLM narration."""
-    p = _PROVIDERS.get(provider_id)
+    providers_dict = _resolve_providers(batch)
+    p = providers_dict.get(provider_id)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
     if p.risk_tier == "high":
@@ -569,7 +570,7 @@ class NarrativeResponse(BaseModel):
     response_model=NarrativeResponse,
     summary="LLM investigation narrative for a flagged provider",
 )
-def explain_provider_post(provider_id: str):
+def explain_provider_post(provider_id: str, batch: str = Query("baseline")):
     """Generate a two-paragraph investigation narrative for a high or medium tier provider.
 
     Runs the evidence assembler first (attaches policy citations to rule findings),
@@ -578,7 +579,8 @@ def explain_provider_post(provider_id: str):
     Returns 400 for low-tier providers (use POST /provider/{id}/why-not instead).
     Returns 503 if all Groq keys are rate-limited; evidence is still returned.
     """
-    p = _PROVIDERS.get(provider_id)
+    providers_dict = _resolve_providers(batch)
+    p = providers_dict.get(provider_id)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
     if p.risk_tier == "low":
@@ -620,7 +622,7 @@ def explain_provider_post(provider_id: str):
     response_model=NarrativeResponse,
     summary="LLM clearance narrative for a non-flagged provider (on demand)",
 )
-def why_not_flagged_post(provider_id: str):
+def why_not_flagged_post(provider_id: str, batch: str = Query("baseline")):
     """Generate a one-paragraph clearance narrative for a low or medium tier provider.
 
     Called on demand only — clearance narratives are never pre-generated.
@@ -629,7 +631,8 @@ def why_not_flagged_post(provider_id: str):
     Returns 400 for high-tier providers (use POST /provider/{id}/explain instead).
     Returns 503 if all Groq keys are rate-limited; evidence is still returned.
     """
-    p = _PROVIDERS.get(provider_id)
+    providers_dict = _resolve_providers(batch)
+    p = providers_dict.get(provider_id)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
     if p.risk_tier == "high":
@@ -1112,28 +1115,34 @@ def get_provider_claims(
     provider_id: str,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    batch: str = Query("baseline"),
 ):
     """Paginated claim-level detail. Falls back to synthetic claims when CSV files are absent."""
-    if provider_id not in _PROVIDERS:
+    providers_dict = _resolve_providers(batch)
+    if provider_id not in providers_dict:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
 
-    ip_df, op_df = _get_claims_df()
+    p = providers_dict[provider_id]
 
-    rows: list[ClaimRow] = []
-    if not ip_df.empty and "Provider" in ip_df.columns:
-        sub = ip_df[ip_df["Provider"] == provider_id]
-        for _, r in sub.iterrows():
-            rows.append(_parse_claim(r.to_dict(), "inpatient"))
-
-    if not op_df.empty and "Provider" in op_df.columns:
-        sub = op_df[op_df["Provider"] == provider_id]
-        for _, r in sub.iterrows():
-            rows.append(_parse_claim(r.to_dict(), "outpatient"))
-
-    # CSV files not present in container — generate synthetic claims from aggregate stats
-    if not rows:
-        p = _PROVIDERS[provider_id]
+    # For uploaded batches, always use synthetic claims (no raw CSV available)
+    if batch != "baseline":
         rows = _generate_synthetic_claims(provider_id, p.n_claims, p.total_reimbursed, p.risk_tier)
+    else:
+        ip_df, op_df = _get_claims_df()
+        rows: list[ClaimRow] = []
+        if not ip_df.empty and "Provider" in ip_df.columns:
+            sub = ip_df[ip_df["Provider"] == provider_id]
+            for _, r in sub.iterrows():
+                rows.append(_parse_claim(r.to_dict(), "inpatient"))
+
+        if not op_df.empty and "Provider" in op_df.columns:
+            sub = op_df[op_df["Provider"] == provider_id]
+            for _, r in sub.iterrows():
+                rows.append(_parse_claim(r.to_dict(), "outpatient"))
+
+        # CSV files not present in container — generate synthetic claims from aggregate stats
+        if not rows:
+            rows = _generate_synthetic_claims(provider_id, p.n_claims, p.total_reimbursed, p.risk_tier)
 
     # Evaluate claim-level rules and flag violations
     rows = _apply_claim_rules(rows)
@@ -1161,12 +1170,13 @@ def get_provider_claims(
 
 
 @app.post("/provider/{provider_id}/disposition", summary="Set reviewer disposition")
-def set_disposition(provider_id: str, body: DispositionBody):
+def set_disposition(provider_id: str, body: DispositionBody, batch: str = Query("baseline")):
     """Record a reviewer decision (confirmed / cleared / needs_info).
 
     Stored in memory for the session. Returns the updated provider detail.
     """
-    if provider_id not in _PROVIDERS:
+    providers_dict = _resolve_providers(batch)
+    if provider_id not in providers_dict:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
     _DISPOSITIONS[provider_id] = body.disposition
     return {"provider_id": provider_id, "status": body.disposition, "note": body.note}
@@ -1263,9 +1273,10 @@ def get_fingerprint():
 
 
 @app.get("/provider/{provider_id}/explain", summary="LLM explanation — use POST instead")
-def explain_provider_get(provider_id: str):
+def explain_provider_get(provider_id: str, batch: str = Query("baseline")):
     """Redirect hint: the narrator uses POST /provider/{id}/explain."""
-    if provider_id not in _PROVIDERS:
+    providers_dict = _resolve_providers(batch)
+    if provider_id not in providers_dict:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
     raise HTTPException(
         status_code=405,
@@ -1345,6 +1356,43 @@ def get_top_claims(limit: int = Query(100, ge=1, le=100)):
     return top[:limit]
 
 
+class ClaimSearchResult(BaseModel):
+    claim_id: str
+    provider_id: str
+    claim_risk_tier: str
+    amount_reimbursed: float
+    rule_flags: list[str]
+
+
+@app.get("/claims/search", response_model=list[ClaimSearchResult], summary="Search claims by ID prefix")
+def search_claims(q: str = Query("", min_length=1), limit: int = Query(10, ge=1, le=30), batch: str = Query("baseline")):
+    """Search scored claims by claim_id prefix. Used by the chat UI autocomplete for # tags."""
+    q_upper = q.upper()
+    results = []
+
+    # For uploaded batches, search claim IDs derived from provider claim counts (no claim-level index)
+    if batch != "baseline" and batch in _BATCH_PROVIDERS:
+        for provider in _BATCH_PROVIDERS[batch].values():
+            # Batch providers don't have per-claim IDs in the index; skip
+            pass
+        return results
+
+    # Baseline: search the pre-scored claim index
+    _, index = _load_claim_data()
+    for claim_id, v in index.items():
+        if claim_id.startswith(q_upper):
+            results.append(ClaimSearchResult(
+                claim_id=claim_id,
+                provider_id=v.get("provider_id", ""),
+                claim_risk_tier=v.get("claim_risk_tier", "low"),
+                amount_reimbursed=v.get("amount_reimbursed", 0.0),
+                rule_flags=v.get("rule_flags", []),
+            ))
+            if len(results) >= limit:
+                break
+    return results
+
+
 @app.get(
     "/claims/{claim_id}",
     response_model=ScoredClaimResponse,
@@ -1391,33 +1439,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
-
-
-class ClaimSearchResult(BaseModel):
-    claim_id: str
-    provider_id: str
-    claim_risk_tier: str
-    amount_reimbursed: float
-    rule_flags: list[str]
-
-@app.get("/claims/search", response_model=list[ClaimSearchResult], summary="Search claims by ID prefix")
-def search_claims(q: str = Query("", min_length=1), limit: int = Query(10, ge=1, le=30)):
-    """Search scored claims by claim_id prefix. Used by the chat UI autocomplete for # tags."""
-    _, index = _load_claim_data()
-    q_upper = q.upper()
-    results = []
-    for claim_id, v in index.items():
-        if claim_id.startswith(q_upper):
-            results.append(ClaimSearchResult(
-                claim_id=claim_id,
-                provider_id=v.get("provider_id", ""),
-                claim_risk_tier=v.get("claim_risk_tier", "low"),
-                amount_reimbursed=v.get("amount_reimbursed", 0.0),
-                rule_flags=v.get("rule_flags", []),
-            ))
-            if len(results) >= limit:
-                break
-    return results
 
 
 _CHAT_SYSTEM = (

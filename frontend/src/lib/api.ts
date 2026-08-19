@@ -272,6 +272,7 @@ export async function fetchClaims(
   id: string,
   page = 1,
   perPage = 50,
+  batch = "baseline",
 ): Promise<ClaimsResponse> {
   if (USE_MOCK) {
     const claims = mockClaims(id);
@@ -284,7 +285,7 @@ export async function fetchClaims(
     };
   }
   return apiFetch<ClaimsResponse>(
-    `/provider/${id}/claims?page=${page}&per_page=${perPage}`,
+    `/provider/${id}/claims?page=${page}&per_page=${perPage}&batch=${encodeURIComponent(batch)}`,
   );
 }
 
@@ -317,11 +318,12 @@ export async function setDisposition(
   id: string,
   disposition: "confirmed" | "cleared" | "needs_info",
   note = "",
+  batch = "baseline",
 ): Promise<DispositionResponse> {
   if (USE_MOCK) {
     return { provider_id: id, status: disposition, note };
   }
-  return apiFetch<DispositionResponse>(`/provider/${id}/disposition`, {
+  return apiFetch<DispositionResponse>(`/provider/${id}/disposition?batch=${encodeURIComponent(batch)}`, {
     method: "POST",
     body: JSON.stringify({ disposition, note }),
   });
@@ -330,10 +332,11 @@ export async function setDisposition(
 /** POST /provider/{id}/explain — returns narrative + enriched evidence with policy citations. */
 export async function fetchExplanation(
   id: string,
+  batch = "baseline",
 ): Promise<NarrativeResponse | null> {
   if (USE_MOCK) return null;
   try {
-    return await apiFetch<NarrativeResponse>(`/provider/${id}/explain`, {
+    return await apiFetch<NarrativeResponse>(`/provider/${id}/explain?batch=${encodeURIComponent(batch)}`, {
       method: "POST",
     });
   } catch (err: unknown) {
@@ -346,10 +349,11 @@ export async function fetchExplanation(
 /** POST /provider/{id}/why-not — on-demand clearance narrative for low/medium tier. */
 export async function fetchClearance(
   id: string,
+  batch = "baseline",
 ): Promise<NarrativeResponse | null> {
   if (USE_MOCK) return null;
   try {
-    return await apiFetch<NarrativeResponse>(`/provider/${id}/why-not`, {
+    return await apiFetch<NarrativeResponse>(`/provider/${id}/why-not?batch=${encodeURIComponent(batch)}`, {
       method: "POST",
     });
   } catch (err: unknown) {
@@ -454,25 +458,24 @@ export interface ClaimSearchResult {
   rule_flags: string[];
 }
 
-export async function fetchClaimSearch(q: string): Promise<ClaimSearchResult[]> {
-  if (!q || q.length < 2) return [];
-  try {
-    return await apiFetch<ClaimSearchResult[]>(`/claims/search?q=${encodeURIComponent(q)}&limit=8`);
-  } catch {
-    return [];
-  }
-}
-
 /** POST /chat — general assistant with optional provider evidence context and conversation history. */
 export async function chatWithAssistant(
   message: string,
   providerIds: string[] = [],
   history: ChatHistoryMessage[] = [],
   claimIds: string[] = [],
+  batch: string = "baseline",
 ): Promise<string> {
-  const data = await apiFetch<{ reply: string }>("/chat", {
+  const data = await apiFetch<{ reply: string }>(`/chat?batch=${encodeURIComponent(batch)}`, {
     method: "POST",
     body: JSON.stringify({ message, provider_ids: providerIds, history, claim_ids: claimIds }),
   });
   return data.reply;
+}
+
+/** GET /claims/search — autocomplete claim IDs for # tags in the chat assistant. */
+export async function fetchClaimSearch(q: string, batch: string = "baseline"): Promise<ClaimSearchResult[]> {
+  return apiFetch<ClaimSearchResult[]>(
+    `/claims/search?q=${encodeURIComponent(q)}&limit=8&batch=${encodeURIComponent(batch)}`
+  );
 }

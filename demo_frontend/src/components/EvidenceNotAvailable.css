@@ -1,0 +1,22 @@
+.evidence-unavailable {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px dashed rgba(100, 116, 139, 0.35);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-top: 14px;
+}
+
+.evidence-unavailable-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+
+.evidence-unavailable p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}

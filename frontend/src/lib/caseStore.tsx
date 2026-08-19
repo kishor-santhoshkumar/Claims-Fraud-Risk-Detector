@@ -101,9 +101,9 @@ export function CaseStoreProvider({
     });
     // Fire-and-forget — persist to backend
     if (status !== "unreviewed") {
-      setDisposition(providerId, status).catch(console.error);
+      setDisposition(providerId, status, "", batch).catch(console.error);
     }
-  }, []);
+  }, [batch]);
 
   const reset = useCallback(() => {
     setLocalStatuses({});

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { EvidenceList } from "@/components/EvidenceList";
 import { NarrativePanel } from "@/components/NarrativePanel";
 import { useCaseStore } from "@/lib/caseStore";
+import { useBatch } from "@/lib/batchContext";
 import { type CaseStatus, type ProviderDetail } from "@/lib/api";
 import { formatMoneyFull } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 export function CaseDetail({ provider, variant }: { provider: ProviderDetail; variant: "case" | "clearance" }) {
   const navigate = useNavigate();
   const { providers, setStatus } = useCaseStore();
+  const { activeBatch } = useBatch();
   const [explaining, setExplaining] = useState(false);
 
   const queueEntry = providers.find((p) => p.provider_id === provider.provider_id);
@@ -260,6 +262,7 @@ export function CaseDetail({ provider, variant }: { provider: ProviderDetail; va
         variant={variant}
         open={explaining}
         onOpenChange={setExplaining}
+        batch={activeBatch}
       />
     </div>
   );
