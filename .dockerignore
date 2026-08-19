@@ -17,4 +17,8 @@ frontend/node_modules/
 frontend/.vite/
 frontend/dist/
 outputs/figures/
+outputs/batches/
+outputs/sample_month.csv
+demo/
+demo_frontend/
 .env
